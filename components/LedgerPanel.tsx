@@ -10,18 +10,12 @@ type LedgerPanelProps = {
 export function LedgerPanel({ entries, open, onClose, onSelect }: LedgerPanelProps) {
   const ordered = [...entries].sort((a, b) => b.date.localeCompare(a.date));
 
+  if (!open) return null;
+
   return (
-    <div
-      className={`fixed inset-0 z-40 bg-black/0 transition-opacity ${
-        open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
-      }`}
-    >
+    <div className="fixed inset-0 z-40 bg-black/0">
       <button aria-label="close ledger" className="absolute inset-0 cursor-default" type="button" onClick={onClose} />
-      <section
-        className={`glass absolute inset-x-3 bottom-3 max-h-[80dvh] rounded-[2rem] p-6 transition-transform duration-300 ease-out sm:mx-auto sm:max-w-xl ${
-          open ? "translate-y-0" : "translate-y-8"
-        }`}
-      >
+      <section className="glass absolute inset-x-3 bottom-3 max-h-[80dvh] translate-y-0 rounded-[2rem] p-6 transition-transform duration-300 ease-out sm:mx-auto sm:max-w-xl">
         <div className="mb-6 flex items-end justify-between gap-4">
           <div>
             <h2 className="font-display text-3xl font-medium">read so far</h2>
