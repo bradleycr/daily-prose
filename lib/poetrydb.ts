@@ -61,6 +61,7 @@ function readAuthorCache(): string[] | null {
 
     const parsed = JSON.parse(raw) as CachedAuthors;
     if (parsed.expiresAt < Date.now()) return null;
+    if (!Array.isArray(parsed.authors) || parsed.authors.length === 0) return null;
     return parsed.authors;
   } catch {
     return null;
