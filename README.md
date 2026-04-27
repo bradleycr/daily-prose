@@ -1,36 +1,28 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Daily Prose
 
-## Getting Started
+Daily Prose is a tiny personal poetry reader: one quiet poem at a time, a private local ledger, and a recommendation loop that slowly learns from what is kept or dismissed. It mixes canonical public-domain poems from PoetryDB with the current Poem-a-Day from poets.org, using a server route for contemporary parsing and browser `localStorage` for all private state.
 
-First, run the development server:
+## Local Development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). No API keys, login, database, cookies, or paid services are required.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploy
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Push the repository to GitHub, then import it into Vercel. The default build command is `pnpm build`; icon generation runs automatically before the build.
 
-## Learn More
+GitHub Pages is not used because the poets.org pipe needs a server-side route. A fully static export would lose the contemporary poem source.
 
-To learn more about Next.js, take a look at the following resources:
+## Notes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+PoetryDB does not preserve special visual layouts for every canonical poem, so highly spatial works may not be perfectly faithful. Contemporary poem text is not stored long-term in localStorage; the ledger stores metadata and links back to poets.org.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Stretch Goals
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- hand-format special poems such as George Herbert's shaped verse
+- add optional short reflections behind a user-provided free-tier Groq key
+- add a small static set of short prose pieces
+- add optional cross-device sync with Vercel KV

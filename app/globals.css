@@ -1,26 +1,102 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --paper: #faf7f2;
+  --paper-deep: #f4efe6;
+  --ink: #1f1b16;
+  --muted: #6f6759;
+  --glass-fill: rgba(255, 252, 246, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.5);
+  --glass-shadow: 0 8px 32px rgba(31, 27, 22, 0.08);
+  --kept: #9b2226;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --paper: #1a1815;
+    --paper-deep: #23201b;
+    --ink: #e8e2d5;
+    --muted: #8b8270;
+    --glass-fill: rgba(50, 46, 40, 0.55);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    --kept: #e0a4a4;
   }
 }
 
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--paper);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at 85% 80%, color-mix(in srgb, var(--paper-deep) 62%, transparent), transparent 42%),
+    var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body), Georgia, serif;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  cursor: pointer;
+}
+
+.glass {
+  border: 1px solid var(--glass-border);
+  background: var(--glass-fill);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.font-display {
+  font-family: var(--font-display), Georgia, serif;
+}
+
+.poem {
+  font-family: var(--font-body), Georgia, serif;
+  font-size: 1.15rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: keep-all;
+  hyphens: none;
+  text-align: left;
+}
+
+.poem p {
+  margin: 0 0 1.7em;
+}
+
+.poem em,
+.poem i {
+  font-style: italic;
+}
+
+.contemporary-poem {
+  overflow-wrap: break-word;
+}
+
+@media (min-width: 640px) {
+  .poem {
+    font-size: 1.24rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
 }
