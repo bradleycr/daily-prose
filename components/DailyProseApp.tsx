@@ -178,6 +178,7 @@ export function DailyProseApp() {
         isArchiveView={archiveView}
         isFading={isFading}
         onRetry={retry}
+        loading={busy}
       />
 
       {archiveView ? (

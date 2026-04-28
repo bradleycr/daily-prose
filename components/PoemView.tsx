@@ -1,4 +1,5 @@
 import type { DisplayPoem } from "@/lib/types";
+import { LoadingGlyph } from "@/components/LoadingGlyph";
 
 type PoemViewProps = {
   poem: DisplayPoem | null;
@@ -6,6 +7,7 @@ type PoemViewProps = {
   isFading?: boolean;
   isArchiveView?: boolean;
   onRetry?: () => void;
+  loading?: boolean;
 };
 
 export function PoemView({
@@ -14,6 +16,7 @@ export function PoemView({
   isFading = false,
   isArchiveView = false,
   onRetry,
+  loading = false,
 }: PoemViewProps) {
   if (!poem) {
     return (
@@ -44,9 +47,17 @@ export function PoemView({
             by <span className="font-display italic normal-case tracking-[0.04em]">{poem.author}</span>
           </p>
         </div>
-        <p className="shrink-0 pt-1 text-[0.68rem] uppercase tracking-[0.14em] text-[color:var(--muted)]">
-          {isArchiveView ? "memory" : dateLabel}
-        </p>
+        <div className="shrink-0 pt-1 text-right">
+          <p className="text-[0.68rem] uppercase tracking-[0.14em] text-[color:var(--muted)]">
+            {isArchiveView ? "memory" : dateLabel}
+          </p>
+          {loading ? (
+            <LoadingGlyph
+              label="loading poem"
+              className="mt-2 flex justify-end text-[color:var(--muted)] opacity-80"
+            />
+          ) : null}
+        </div>
       </div>
 
       {poem.htmlBody ? (

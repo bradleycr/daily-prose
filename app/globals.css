@@ -83,6 +83,38 @@ button {
   overflow-wrap: break-word;
 }
 
+.dp-breathe {
+  width: 3.25rem;
+  height: 0.9rem;
+}
+
+.dp-dot {
+  fill: currentColor;
+  opacity: 0.22;
+  transform-origin: center;
+  animation: dp-breathe 1.6s ease-in-out infinite;
+}
+
+.dp-dot-2 {
+  animation-delay: 0.18s;
+}
+
+.dp-dot-3 {
+  animation-delay: 0.36s;
+}
+
+@keyframes dp-breathe {
+  0%,
+  100% {
+    opacity: 0.22;
+    transform: translateY(0) scale(0.98);
+  }
+  45% {
+    opacity: 0.72;
+    transform: translateY(-0.6px) scale(1.08);
+  }
+}
+
 @media (min-width: 640px) {
   .poem {
     font-size: 1.24rem;
