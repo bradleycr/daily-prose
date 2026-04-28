@@ -4,6 +4,7 @@ import type { CanonPoem } from "./types";
 const AUTHOR_CACHE_KEY = "dailyProse:verifiedAuthors:v1";
 const AUTHOR_CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
 const authorPoemCache = new Map<string, CanonPoem[]>();
+const authorPoemInFlight = new Map<string, Promise<CanonPoem[]>>();
 
 type CachedAuthors = {
   expiresAt: number;
@@ -39,17 +40,35 @@ export async function getPoemsByAuthor(author: string): Promise<CanonPoem[]> {
   const cached = authorPoemCache.get(author);
   if (cached) return cached;
 
-  const response = await fetch(`https://poetrydb.org/author/${encodeURIComponent(author)}`, {
-    headers: { Accept: "application/json" },
-  });
+  const inFlight = authorPoemInFlight.get(author);
+  if (inFlight) return inFlight;
 
-  if (!response.ok) return [];
+  const request = (async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 7000);
 
-  const data = (await response.json()) as CanonPoem[] | { status?: number; reason?: string };
-  const poems = Array.isArray(data) ? data : [];
-  authorPoemCache.set(author, poems);
+    try {
+      const response = await fetch(`https://poetrydb.org/author/${encodeURIComponent(author)}`, {
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      });
 
-  return poems;
+      if (!response.ok) return [];
+
+      const data = (await response.json()) as CanonPoem[] | { status?: number; reason?: string };
+      const poems = Array.isArray(data) ? data : [];
+      authorPoemCache.set(author, poems);
+      return poems;
+    } catch {
+      return [];
+    } finally {
+      clearTimeout(timeout);
+      authorPoemInFlight.delete(author);
+    }
+  })();
+
+  authorPoemInFlight.set(author, request);
+  return request;
 }
 
 function readAuthorCache(): string[] | null {

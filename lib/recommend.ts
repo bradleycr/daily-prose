@@ -97,13 +97,20 @@ async function pickContemporary(seen: Set<string>): Promise<DisplayPoem | null> 
 
 async function pickCanon(state: AppState, seen: Set<string>): Promise<DisplayPoem | null> {
   const authors = await getCanonAuthors();
-  const sampledAuthors = sampleAuthors(authors, state, 18);
+  const sampledAuthors = sampleAuthors(authors, state, 22);
   const candidates: DisplayPoem[] = [];
 
-  for (const author of sampledAuthors) {
-    const poems = await getPoemsByAuthor(author);
+  // Fetch several authors in parallel, stop as soon as we have enough options.
+  await mapLimit(sampledAuthors, 5, async (author) => {
+    if (candidates.length >= 26) return;
 
-    for (const poem of poems) {
+    const poems = await getPoemsByAuthor(author);
+    if (!poems.length) return;
+
+    // Avoid scanning huge payloads end-to-end: sample a slice after shuffling indices.
+    const picks = sampleIndices(poems.length, Math.min(42, poems.length));
+    for (const index of picks) {
+      const poem = poems[index];
       const lineCount = Number(poem.linecount || poem.lines.length);
       const key = poemKey("canon", poem.author, poem.title);
 
@@ -118,13 +125,43 @@ async function pickCanon(state: AppState, seen: Set<string>): Promise<DisplayPoe
         poemUrl: `https://poetrydb.org/author/${encodeURIComponent(poem.author)}`,
         authorUrl: wikipediaLinkFor(poem.author),
       });
-    }
 
-    // Once we have a decent pool, scoring can do the rest.
-    if (candidates.length >= 24) break;
-  }
+      if (candidates.length >= 26) return;
+    }
+  });
 
   return scoreCandidates(candidates, state)[0] ?? null;
+}
+
+async function mapLimit<T>(
+  items: T[],
+  limit: number,
+  mapper: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  let nextIndex = 0;
+
+  const workers = Array.from({ length: Math.max(1, limit) }, async () => {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) return;
+      await mapper(items[index], index);
+    }
+  });
+
+  await Promise.all(workers);
+}
+
+function sampleIndices(max: number, count: number): number[] {
+  const indices = Array.from({ length: max }, (_, index) => index);
+
+  // Fisher–Yates, but we only need the first `count`.
+  for (let i = 0; i < count; i += 1) {
+    const j = i + Math.floor(Math.random() * (max - i));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+
+  return indices.slice(0, count);
 }
 
 function sampleAuthors(authors: string[], state: AppState, count: number): string[] {
