@@ -8,7 +8,10 @@ type LedgerPanelProps = {
 };
 
 export function LedgerPanel({ entries, open, onClose, onSelect }: LedgerPanelProps) {
-  const ordered = [...entries].sort((a, b) => b.date.localeCompare(a.date));
+  const ordered = entries
+    .filter((entry) => entry.status === "kept")
+    .slice()
+    .sort((a, b) => b.date.localeCompare(a.date));
 
   if (!open) return null;
 

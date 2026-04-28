@@ -25,7 +25,14 @@ export function CircleMark({ className }: MarkProps) {
   return (
     <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24">
       <path
-        d="M7.1 14.2c1.5 2.7 6.4 3.3 9.1 1.4 2.3-1.7 2.1-5-.2-6.6-2.4-1.6-6.8-1.4-8.7.8"
+        d="M18.3 10.7a6.5 6.5 0 0 0-11.6-2.4M5.7 13.3a6.5 6.5 0 0 0 11.6 2.4"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M17.7 10.7h-3.1V7.6M6.3 13.3h3.1v3.1"
         stroke="currentColor"
         strokeLinecap="round"
         strokeLinejoin="round"

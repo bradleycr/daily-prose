@@ -165,9 +165,20 @@ export function DailyProseApp() {
     commitState({ ...state, installHintDismissed: true });
   };
 
+  const retry = async () => {
+    if (!state) return;
+    await chooseFreshPoem(state);
+  };
+
   return (
     <>
-      <PoemView poem={visiblePoem} dateLabel={dateLabel} isArchiveView={archiveView} isFading={isFading} />
+      <PoemView
+        poem={visiblePoem}
+        dateLabel={dateLabel}
+        isArchiveView={archiveView}
+        isFading={isFading}
+        onRetry={retry}
+      />
 
       {archiveView ? (
         <button
@@ -191,7 +202,13 @@ export function DailyProseApp() {
       ) : null}
 
       {visiblePoem ? (
-        <MoreOverlay poem={visiblePoem} open={moreOpen} copied={copied} onCopy={handleCopy} />
+        <MoreOverlay
+          poem={visiblePoem}
+          open={moreOpen}
+          copied={copied}
+          onCopy={handleCopy}
+          onClose={() => setMoreOpen(false)}
+        />
       ) : null}
 
       <ActionPill

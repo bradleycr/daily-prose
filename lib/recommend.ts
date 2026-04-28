@@ -97,7 +97,7 @@ async function pickContemporary(seen: Set<string>): Promise<DisplayPoem | null> 
 
 async function pickCanon(state: AppState, seen: Set<string>): Promise<DisplayPoem | null> {
   const authors = await getCanonAuthors();
-  const sampledAuthors = sampleAuthors(authors, state, 8);
+  const sampledAuthors = sampleAuthors(authors, state, 18);
   const candidates: DisplayPoem[] = [];
 
   for (const author of sampledAuthors) {
@@ -119,6 +119,9 @@ async function pickCanon(state: AppState, seen: Set<string>): Promise<DisplayPoe
         authorUrl: wikipediaLinkFor(poem.author),
       });
     }
+
+    // Once we have a decent pool, scoring can do the rest.
+    if (candidates.length >= 24) break;
   }
 
   return scoreCandidates(candidates, state)[0] ?? null;

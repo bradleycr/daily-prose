@@ -5,13 +5,24 @@ type PoemViewProps = {
   dateLabel: string;
   isFading?: boolean;
   isArchiveView?: boolean;
+  onRetry?: () => void;
 };
 
-export function PoemView({ poem, dateLabel, isFading = false, isArchiveView = false }: PoemViewProps) {
+export function PoemView({
+  poem,
+  dateLabel,
+  isFading = false,
+  isArchiveView = false,
+  onRetry,
+}: PoemViewProps) {
   if (!poem) {
     return (
       <main className="mx-auto flex min-h-dvh w-full max-w-[38rem] items-center px-7 text-[color:var(--muted)]">
-        <button className="text-left text-lg italic" type="button" onClick={() => window.location.reload()}>
+        <button
+          className="text-left text-lg italic"
+          type="button"
+          onClick={() => (onRetry ? onRetry() : window.location.reload())}
+        >
           the library is quiet right now. tap to try again.
         </button>
       </main>
