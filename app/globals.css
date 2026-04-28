@@ -115,6 +115,35 @@ button {
   }
 }
 
+.dp-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--paper-deep) 50%, transparent), transparent 55%),
+    var(--paper);
+}
+
+.dp-loading-surface {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1.4rem 1.75rem;
+}
+
+.dp-loading-label {
+  margin: 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 0.9rem;
+  letter-spacing: 0.22em;
+  text-transform: lowercase;
+  color: var(--muted);
+  opacity: 0.9;
+}
+
 @media (min-width: 640px) {
   .poem {
     font-size: 1.24rem;

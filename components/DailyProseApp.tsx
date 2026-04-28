@@ -5,6 +5,7 @@ import { ActionPill } from "@/components/ActionPill";
 import { InstallHint } from "@/components/InstallHint";
 import { LedgerButton } from "@/components/LedgerButton";
 import { LedgerPanel } from "@/components/LedgerPanel";
+import { LoadingOverlay } from "@/components/LoadingOverlay";
 import { MoreOverlay } from "@/components/MoreOverlay";
 import { PoemView } from "@/components/PoemView";
 import { displayFromEntry, entryFromPoem, getState, saveState, todayKey } from "@/lib/storage";
@@ -172,6 +173,7 @@ export function DailyProseApp() {
 
   return (
     <>
+      <LoadingOverlay open={busy && !archiveView} label="loading poem" />
       <PoemView
         poem={visiblePoem}
         dateLabel={dateLabel}
