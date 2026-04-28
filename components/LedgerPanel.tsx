@@ -16,7 +16,7 @@ export function LedgerPanel({ entries, open, onClose, onSelect }: LedgerPanelPro
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/0">
+    <div className="fixed inset-0 z-40" style={{ backgroundColor: "var(--paper)" }}>
       <button aria-label="close ledger" className="absolute inset-0 cursor-default" type="button" onClick={onClose} />
       <section className="glass absolute inset-x-3 bottom-3 max-h-[80dvh] translate-y-0 rounded-[2rem] p-6 transition-transform duration-300 ease-out sm:mx-auto sm:max-w-xl">
         <div className="mb-6 flex items-end justify-between gap-4">
