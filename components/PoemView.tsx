@@ -20,14 +20,21 @@ export function PoemView({
 }: PoemViewProps) {
   if (!poem) {
     return (
-      <main className="mx-auto flex min-h-dvh w-full max-w-[38rem] items-center px-7 text-[color:var(--muted)]">
-        <button
-          className="text-left text-lg italic"
-          type="button"
-          onClick={() => (onRetry ? onRetry() : window.location.reload())}
-        >
-          the library is quiet right now. tap to try again.
-        </button>
+      <main className="mx-auto flex min-h-dvh w-full max-w-[38rem] items-center justify-center px-7 text-[color:var(--muted)]">
+        {loading ? (
+          <div className="flex flex-col items-center gap-4">
+            <LoadingGlyph label="loading poem" className="text-[color:var(--muted)]" />
+            <p className="text-sm lowercase tracking-[0.08em] opacity-80">loading</p>
+          </div>
+        ) : (
+          <button
+            className="text-left text-lg italic"
+            type="button"
+            onClick={() => (onRetry ? onRetry() : window.location.reload())}
+          >
+            the library is quiet right now. tap to try again.
+          </button>
+        )}
       </main>
     );
   }
