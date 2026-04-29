@@ -170,11 +170,17 @@ async function tryCuratePick(
       tasteProfile: state.prefs.tasteProfile ?? "",
     };
 
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 1400);
+
     const response = await fetch("/api/curate", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
+
+    window.clearTimeout(timeout);
 
     if (!response.ok) return null;
     const data = (await response.json()) as { selectedId: string; rationale: string; tasteUpdate: string };
