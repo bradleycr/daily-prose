@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { HfInference } from "@huggingface/inference";
 import { z } from "zod";
 
 const BodySchema = z.object({
@@ -17,7 +16,7 @@ const BodySchema = z.object({
   history: z.array(
     z.object({
       id: z.string().min(1),
-      status: z.enum(["liked", "disliked", "neutral"]),
+      status: z.enum(["liked", "neutral"]),
       notes: z.string().optional(),
     }),
   ),
@@ -40,8 +39,6 @@ const OutputSchema = z.object({
   tasteUpdate: z.string().min(1),
 });
 
-const hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
-
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
@@ -54,21 +51,28 @@ export async function POST(req: Request) {
   const models = preferred
     ? [preferred]
     : [
-        // Small, commonly-available instruct models tend to be the most reliable on low/credit-limited tiers.
+        // Hugging Face moved serverless LLM access behind the unified router.
+        // `katanemo/Arch-Router-1.5B` is commonly available on the free tier via `/v1/chat/completions`.
+        "katanemo/Arch-Router-1.5B",
+        "HuggingFaceTB/SmolLM2-360M-Instruct",
         "microsoft/Phi-3-mini-4k-instruct",
-        "Qwen/Qwen2.5-3B-Instruct",
-        "mistralai/Mistral-7B-Instruct-v0.2",
       ];
 
   const prompt = buildPrompt(body);
 
-  const result = await runTextGeneration(models, prompt);
-  if (!result) {
-    return NextResponse.json({ error: "curator_unavailable" }, { status: 503 });
+  const result = await runCurator(models, prompt, process.env.HUGGINGFACE_API_KEY);
+  if (!result.ok) {
+    return NextResponse.json(
+      {
+        error: "curator_unavailable",
+        detail: result.detail,
+      },
+      { status: 503 },
+    );
   }
 
-  const raw = (result.generated_text ?? "").trim();
-  const parsed = safeParseJson(raw);
+  const raw = (result.value.content ?? "").trim();
+  const parsed = parseCuratorJson(raw);
   const output = OutputSchema.parse(parsed);
 
   // Hard guarantee: selectedId must be one of candidates.
@@ -80,29 +84,108 @@ export async function POST(req: Request) {
   return NextResponse.json(output);
 }
 
-async function runTextGeneration(models: string[], prompt: string) {
+async function runCurator(
+  models: string[],
+  prompt: string,
+  apiKey: string | undefined,
+): Promise<
+  | { ok: true; value: { content: string } }
+  | { ok: false; detail: { tried: string[]; errors: Record<string, string> } }
+> {
   let lastError: unknown = null;
+  const key = apiKey?.trim();
+  if (!key) return { ok: false, detail: { tried: [], errors: { missing_api_key: "missing_api_key" } } };
 
+  const tried: string[] = [];
+  const errors: Record<string, string> = {};
   for (const model of models) {
     try {
-      return await hf.textGeneration({
+      tried.push(model);
+      const value = await hfRouterChatCompletion({
+        apiKey: key,
         model,
-        inputs: prompt,
-        parameters: {
-          max_new_tokens: 320,
-          temperature: 0.65,
-          return_full_text: false,
-        },
+        prompt,
       });
+      return { ok: true, value };
     } catch (error) {
       lastError = error;
+      errors[model] =
+        error instanceof Error ? error.message : typeof error === "string" ? error : "unknown_error";
       continue;
     }
   }
 
   // Preserve evidence for server logs without exposing internals to client.
-  console.error("HF curator failed for all models", { lastError });
-  return null;
+  console.error("HF curator failed for all models", { tried, lastError });
+  return {
+    ok: false,
+    detail: {
+      tried,
+      errors,
+    },
+  };
+}
+
+async function hfRouterChatCompletion(input: { apiKey: string; model: string; prompt: string }) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12_000);
+
+  try {
+    const baseBody = {
+      model: input.model,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a literary curator. Return ONLY valid JSON with double-quoted keys/strings. No markdown.",
+        },
+        { role: "user", content: input.prompt },
+      ],
+      temperature: 0.55,
+      max_tokens: 420,
+    } as const;
+
+    const attempt = async (body: Record<string, unknown>) => {
+      const response = await fetch("https://router.huggingface.co/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${input.apiKey}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(`hf_router_${response.status}: ${text.slice(0, 260)}`);
+      }
+
+      const data = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string | null } }>;
+      };
+
+      const content = data.choices?.[0]?.message?.content;
+      if (typeof content !== "string" || !content.trim()) {
+        throw new Error("hf_router_unexpected_response");
+      }
+
+      return { content };
+    };
+
+    try {
+      return await attempt({ ...baseBody, response_format: { type: "json_object" } });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes("response_format") || message.includes("json_object")) {
+        return await attempt({ ...baseBody });
+      }
+      throw error;
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function buildPrompt(input: z.infer<typeof BodySchema>): string {
@@ -165,10 +248,34 @@ function truncate(text: string, max: number): string {
   return `${text.slice(0, max - 1)}…`;
 }
 
-function safeParseJson(text: string): unknown {
-  // Many models will still wrap JSON in stray prose. Extract the last object.
-  const match = text.match(/\{[\s\S]*\}$/);
-  const raw = match?.[0] ?? text;
-  return JSON.parse(raw);
+function parseCuratorJson(text: string): unknown {
+  const trimmed = text.trim();
+
+  // Prefer strict JSON.
+  try {
+    const match = trimmed.match(/\{[\s\S]*\}$/);
+    const raw = match?.[0] ?? trimmed;
+    return JSON.parse(raw);
+  } catch {
+    // Some small models return python-ish dicts with single quotes.
+    const selectedId = extractQuotedField(trimmed, "selectedId");
+    const rationale = extractQuotedField(trimmed, "rationale");
+    const tasteUpdate = extractQuotedField(trimmed, "tasteUpdate");
+    if (selectedId && rationale && tasteUpdate) {
+      return { selectedId, rationale, tasteUpdate };
+    }
+
+    throw new Error("curator_json_parse_failed");
+  }
+}
+
+function extractQuotedField(text: string, field: string): string | null {
+  const double = text.match(new RegExp(`"${field}"\\s*:\\s*"([\\s\\S]*?)"`, "m"));
+  if (double?.[1]) return double[1];
+
+  const single = text.match(new RegExp(`'${field}'\\s*:\\s*'([\\s\\S]*?)'`, "m"));
+  if (single?.[1]) return single[1];
+
+  return null;
 }
 

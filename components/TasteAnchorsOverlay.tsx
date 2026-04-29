@@ -5,32 +5,25 @@ import type { TasteAnchor } from "@/lib/types";
 
 type TasteAnchorsOverlayProps = {
   open: boolean;
-  libraryId: string;
   anchors: TasteAnchor[];
   onClose: () => void;
-  onSetLibraryId: (libraryId: string) => void;
-  onAdd: (anchor: TasteAnchor) => Promise<void>;
+  onAdd: (text: string) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
-  onUpdate: (anchor: TasteAnchor) => Promise<void>;
+  onUpdate: (id: string, text: string) => Promise<void>;
 };
 
 export function TasteAnchorsOverlay({
   open,
-  libraryId,
   anchors,
   onClose,
-  onSetLibraryId,
   onAdd,
   onRemove,
   onUpdate,
 }: TasteAnchorsOverlayProps) {
-  const [title, setTitle] = useState("");
-  const [author, setAuthor] = useState("");
   const [text, setText] = useState("");
-  const [libraryDraft, setLibraryDraft] = useState(libraryId);
   const [editing, setEditing] = useState<TasteAnchor | null>(null);
 
-  const canSave = useMemo(() => text.trim().length >= 20, [text]);
+  const canSave = useMemo(() => text.trim().length >= 4, [text]);
 
   if (!open) return null;
 
@@ -41,7 +34,7 @@ export function TasteAnchorsOverlay({
           <div>
             <h2 className="font-display text-3xl font-medium">things i like</h2>
             <p className="mt-1 text-sm italic text-[color:var(--muted)]">
-              paste lines you love. shared across devices by library id.
+              paste lines you love. this is used as curation context.
             </p>
           </div>
           <button className="text-sm lowercase text-[color:var(--muted)]" type="button" onClick={onClose}>
@@ -49,42 +42,8 @@ export function TasteAnchorsOverlay({
           </button>
         </div>
 
-        <div className="glass mb-5 rounded-[1.6rem] p-4">
-          <p className="text-xs lowercase tracking-[0.14em] text-[color:var(--muted)]">library id</p>
-          <div className="mt-2 flex gap-3">
-            <input
-              className="w-full rounded-xl bg-transparent px-3 py-2 text-sm outline-none"
-              value={libraryDraft}
-              placeholder="create or paste a shared id"
-              onChange={(e) => setLibraryDraft(e.target.value)}
-            />
-            <button
-              className="rounded-full px-4 py-2 text-sm lowercase text-[color:var(--ink)]"
-              type="button"
-              onClick={() => onSetLibraryId(libraryDraft.trim())}
-            >
-              use
-            </button>
-          </div>
-          <p className="mt-2 text-xs italic text-[color:var(--muted)]">
-            share this id with someone else to collaborate. no accounts.
-          </p>
-        </div>
-
         <div className="glass rounded-[1.6rem] p-4">
           <div className="grid gap-3">
-            <input
-              className="w-full rounded-xl bg-transparent px-3 py-2 text-sm outline-none"
-              placeholder="title (optional)"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-            <input
-              className="w-full rounded-xl bg-transparent px-3 py-2 text-sm outline-none"
-              placeholder="author (optional)"
-              value={author}
-              onChange={(e) => setAuthor(e.target.value)}
-            />
             <textarea
               className="min-h-32 w-full resize-none rounded-xl bg-transparent px-3 py-2 text-sm leading-6 outline-none"
               placeholder="paste a passage, poem fragment, or anything that feels like home"
@@ -95,7 +54,7 @@ export function TasteAnchorsOverlay({
 
           <div className="mt-4 flex items-center justify-between gap-4">
             <p className="text-xs lowercase tracking-[0.08em] text-[color:var(--muted)]">
-              stored in your shared library when configured
+              shared globally
             </p>
             <button
               className={`rounded-full px-4 py-2 text-sm lowercase ${
@@ -103,21 +62,20 @@ export function TasteAnchorsOverlay({
               }`}
               type="button"
               disabled={!canSave}
-              onClick={() => {
-                const anchor: TasteAnchor = {
-                  id: crypto.randomUUID(),
-                  title: title.trim() || undefined,
-                  author: author.trim() || undefined,
-                  text: text.trim(),
-                  createdAt: new Date().toISOString(),
-                };
-                void onAdd(anchor);
-                setTitle("");
-                setAuthor("");
+              onClick={async () => {
+                if (!canSave) return;
+                if (editing) {
+                  await onUpdate(editing.id, text.trim());
+                  setEditing(null);
+                  setText("");
+                  return;
+                }
+
+                await onAdd(text.trim());
                 setText("");
               }}
             >
-              save
+              {editing ? "update" : "save"}
             </button>
           </div>
         </div>
@@ -135,11 +93,6 @@ export function TasteAnchorsOverlay({
                   <div key={a.id} className="glass rounded-[1.2rem] p-4">
                     <div className="flex items-start justify-between gap-6">
                       <div>
-                        <p className="text-sm leading-6">
-                          {a.title ? <span className="font-display italic">{a.title}</span> : null}
-                          {a.title && a.author ? <span className="text-[color:var(--muted)]"> · </span> : null}
-                          {a.author ? <span className="text-[color:var(--muted)]">{a.author}</span> : null}
-                        </p>
                         <pre className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[color:var(--ink)]">
                           {a.text}
                         </pre>
@@ -150,8 +103,6 @@ export function TasteAnchorsOverlay({
                           type="button"
                           onClick={() => {
                             setEditing(a);
-                            setTitle(a.title ?? "");
-                            setAuthor(a.author ?? "");
                             setText(a.text);
                           }}
                         >
@@ -173,49 +124,18 @@ export function TasteAnchorsOverlay({
         </div>
 
         {editing ? (
-          <div className="mt-6 glass rounded-[1.6rem] p-4">
-            <p className="text-xs lowercase tracking-[0.14em] text-[color:var(--muted)]">editing</p>
-            <div className="mt-3 flex items-center justify-between">
-              <p className="text-sm italic text-[color:var(--muted)]">
-                {editing.title ?? "untitled"} {editing.author ? `· ${editing.author}` : ""}
-              </p>
-              <button
-                className="text-sm lowercase text-[color:var(--muted)]"
-                type="button"
-                onClick={() => {
-                  setEditing(null);
-                  setTitle("");
-                  setAuthor("");
-                  setText("");
-                }}
-              >
-                cancel
-              </button>
-            </div>
-            <div className="mt-3 flex justify-end">
-              <button
-                className={`rounded-full px-4 py-2 text-sm lowercase ${
-                  canSave ? "text-[color:var(--ink)]" : "text-[color:var(--muted)]"
-                }`}
-                type="button"
-                disabled={!canSave}
-                onClick={() => {
-                  const updated: TasteAnchor = {
-                    ...editing,
-                    title: title.trim() || undefined,
-                    author: author.trim() || undefined,
-                    text: text.trim(),
-                  };
-                  void onUpdate(updated);
-                  setEditing(null);
-                  setTitle("");
-                  setAuthor("");
-                  setText("");
-                }}
-              >
-                update
-              </button>
-            </div>
+          <div className="mt-6 flex items-center justify-between">
+            <p className="text-xs lowercase tracking-[0.12em] text-[color:var(--muted)]">editing</p>
+            <button
+              className="text-sm lowercase text-[color:var(--muted)]"
+              type="button"
+              onClick={() => {
+                setEditing(null);
+                setText("");
+              }}
+            >
+              cancel
+            </button>
           </div>
         ) : null}
       </div>

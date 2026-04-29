@@ -17,13 +17,12 @@ export function defaultState(): AppState {
       centuryScores: {},
       sourceScores: {
         canon: 0,
-        contemporary: 1,
+        contemporary: 4,
       },
       seenPoemKeys: [],
       tasteProfile:
         "prefers contemporary, genre-bending work with emotional precision. tends to dislike conventional love poems. likes: rumi (you wake the dead to life), charles bukowski, rainer maria rilke, emily dickinson, and some shakespeare sonnets (esp. sonnet 60).",
       tasteAnchors: [],
-      libraryId: "",
     },
     ledger: [],
     todaySlot: null,
@@ -48,7 +47,6 @@ export function getState(): AppState {
       ledger: (parsed.ledger ?? []).map((entry) => ({
         ...entry,
         likes: typeof entry.likes === "number" ? entry.likes : entry.status === "kept" ? 1 : 0,
-        dislikes: typeof entry.dislikes === "number" ? entry.dislikes : entry.status === "dismissed" ? 1 : 0,
       })),
       prefs: {
         ...defaultState().prefs,
@@ -63,7 +61,6 @@ export function getState(): AppState {
         },
         tasteProfile: parsed.prefs?.tasteProfile ?? defaultState().prefs.tasteProfile,
         tasteAnchors: Array.isArray(parsed.prefs?.tasteAnchors) ? parsed.prefs?.tasteAnchors : [],
-        libraryId: parsed.prefs?.libraryId ?? defaultState().prefs.libraryId,
       },
     };
   } catch {
@@ -89,7 +86,6 @@ export function entryFromPoem(poem: DisplayPoem, date: string): LedgerEntry {
     source: poem.source,
     status: "unread",
     likes: 0,
-    dislikes: 0,
     publishedYear: poem.publishedYear,
     lines: poem.source === "canon" ? poem.lines : undefined,
     poemUrl: poem.poemUrl,

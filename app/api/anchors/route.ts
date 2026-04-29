@@ -1,81 +1,113 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getRedis } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
 
 const AnchorSchema = z.object({
   id: z.string().min(1),
-  title: z.string().optional(),
-  author: z.string().optional(),
   text: z.string().min(1),
   createdAt: z.string().min(1),
 });
 
 const UpsertSchema = z.object({
-  libraryId: z.string().min(8),
   anchor: AnchorSchema,
 });
 
 const DeleteSchema = z.object({
-  libraryId: z.string().min(8),
   id: z.string().min(1),
 });
 
-export async function GET(req: Request) {
-  const redis = getRedis();
-  if (!redis) return NextResponse.json({ error: "redis_not_configured" }, { status: 503 });
+const FILE_NAME = "daily-prose-anchors.json";
 
-  const { searchParams } = new URL(req.url);
-  const libraryId = searchParams.get("libraryId") ?? "";
-  if (libraryId.length < 8) return NextResponse.json({ error: "missing_library_id" }, { status: 400 });
+export async function GET() {
+  const gistId = process.env.GITHUB_ANCHORS_GIST_ID?.trim();
+  if (!gistId) return NextResponse.json({ error: "anchors_gist_not_configured" }, { status: 503 });
 
-  const key = anchorsKey(libraryId);
-  const anchors = (await redis.get(key)) ?? [];
-
+  const anchors = await readAnchorsFromGist(gistId);
   return NextResponse.json({ anchors });
 }
 
 export async function POST(req: Request) {
-  const redis = getRedis();
-  if (!redis) return NextResponse.json({ error: "redis_not_configured" }, { status: 503 });
+  const gistId = process.env.GITHUB_ANCHORS_GIST_ID?.trim();
+  const token = process.env.GITHUB_TOKEN?.trim();
+  if (!gistId || !token) return NextResponse.json({ error: "anchors_gist_not_writable" }, { status: 503 });
 
   const body = UpsertSchema.parse(await req.json());
-  const key = anchorsKey(body.libraryId);
+  const current = await readAnchorsFromGist(gistId);
+  const next = upsert(current, body.anchor);
 
-  const current = ((await redis.get(key)) as unknown) ?? [];
-  const anchors = z.array(AnchorSchema).parse(Array.isArray(current) ? current : []);
+  const ok = await writeAnchorsToGist({ gistId, token, anchors: next });
+  if (!ok) return NextResponse.json({ error: "anchors_gist_write_failed" }, { status: 502 });
 
-  const next = [
-    body.anchor,
-    ...anchors.filter((a) => a.id !== body.anchor.id),
-  ].slice(0, 60);
-
-  await redis.set(key, next);
   return NextResponse.json({ anchors: next });
 }
 
 export async function PUT(req: Request) {
-  // same as POST (id-based upsert)
   return POST(req);
 }
 
 export async function DELETE(req: Request) {
-  const redis = getRedis();
-  if (!redis) return NextResponse.json({ error: "redis_not_configured" }, { status: 503 });
+  const gistId = process.env.GITHUB_ANCHORS_GIST_ID?.trim();
+  const token = process.env.GITHUB_TOKEN?.trim();
+  if (!gistId || !token) return NextResponse.json({ error: "anchors_gist_not_writable" }, { status: 503 });
 
   const body = DeleteSchema.parse(await req.json());
-  const key = anchorsKey(body.libraryId);
+  const current = await readAnchorsFromGist(gistId);
+  const next = current.filter((a) => a.id !== body.id);
 
-  const current = ((await redis.get(key)) as unknown) ?? [];
-  const anchors = z.array(AnchorSchema).parse(Array.isArray(current) ? current : []);
-  const next = anchors.filter((a) => a.id !== body.id);
+  const ok = await writeAnchorsToGist({ gistId, token, anchors: next });
+  if (!ok) return NextResponse.json({ error: "anchors_gist_write_failed" }, { status: 502 });
 
-  await redis.set(key, next);
   return NextResponse.json({ anchors: next });
 }
 
-function anchorsKey(libraryId: string) {
-  return `dailyprose:library:${libraryId}:anchors`;
+async function readAnchorsFromGist(gistId: string) {
+  try {
+    const response = await fetch(`https://api.github.com/gists/${encodeURIComponent(gistId)}`, {
+      headers: { Accept: "application/vnd.github+json" },
+      next: { revalidate: 60 },
+    });
+    if (!response.ok) return [];
+    const data = (await response.json()) as {
+      files?: Record<string, { content?: string | null }>;
+    };
+
+    const raw = data.files?.[FILE_NAME]?.content ?? "[]";
+    const parsed = z.array(AnchorSchema).safeParse(JSON.parse(raw));
+    if (!parsed.success) return [];
+    return parsed.data;
+  } catch {
+    return [];
+  }
+}
+
+async function writeAnchorsToGist(input: { gistId: string; token: string; anchors: z.infer<typeof AnchorSchema>[] }) {
+  try {
+    const response = await fetch(`https://api.github.com/gists/${encodeURIComponent(input.gistId)}`, {
+      method: "PATCH",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${input.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        files: {
+          [FILE_NAME]: {
+            content: JSON.stringify(input.anchors, null, 2),
+          },
+        },
+      }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+function upsert(anchors: z.infer<typeof AnchorSchema>[], anchor: z.infer<typeof AnchorSchema>) {
+  const without = anchors.filter((a) => a.id !== anchor.id);
+  const next = [anchor, ...without];
+  next.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return next;
 }
 

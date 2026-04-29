@@ -1,6 +1,6 @@
 # Daily Prose
 
-Daily Prose is a tiny personal poetry reader: one quiet poem at a time, a private local ledger, and a recommendation loop that slowly learns from what is kept or dismissed. It mixes canonical public-domain poems from PoetryDB with the current Poem-a-Day from poets.org, using a server route for contemporary parsing and browser `localStorage` for all private state.
+Daily Prose is a tiny personal poetry reader: one quiet poem at a time, a private local ledger, and a recommendation loop that slowly learns from what is liked. It mixes canonical public-domain poems from PoetryDB with the current Poem-a-Day from poets.org, using a server route for contemporary parsing and browser `localStorage` for all private state.
 
 ## Local Development
 
@@ -24,15 +24,6 @@ If you want the app to choose from a small candidate pool using a taste-model ag
 - `HUGGINGFACE_MODEL` (optional; defaults are in `app/api/curate/route.ts`, tuned for small/free-tier-friendly models)
 
 See `.env.example`. Keys are server-only and never exposed to the client.
-
-## Taste anchors sync (communal)
-
-To make “things i like” persistent across devices (and shareable), add an Upstash Redis integration in Vercel, then set:
-
-- `UPSTASH_REDIS_REST_URL`
-- `UPSTASH_REDIS_REST_TOKEN`
-
-Once configured, the app uses a shared **library id** (shown in “things i like”) so multiple devices can contribute.
 
 ## Notes
 

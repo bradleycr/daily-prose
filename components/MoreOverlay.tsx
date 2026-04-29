@@ -6,50 +6,54 @@ type MoreOverlayProps = {
   copied: boolean;
   onCopy: () => void;
   onClose: () => void;
-  onOpenAnchors: () => void;
+  curation?: {
+    mode: "curated" | "fallback";
+    rationale?: string;
+    tasteUpdate?: string;
+  };
+  curatorEnabled?: boolean | null;
 };
 
-export function MoreOverlay({ poem, open, copied, onCopy, onClose, onOpenAnchors }: MoreOverlayProps) {
+export function MoreOverlay({ poem, open, copied, onCopy, onClose, curation, curatorEnabled }: MoreOverlayProps) {
   if (!open) return null;
 
-  const sourceLabel = poem.source === "canon" ? "poetrydb.org" : "poets.org";
+  const sourceLabel = poem.source === "canon" ? "poetry foundation" : "poets.org";
 
   return (
     <div className="fixed inset-0 z-40">
       <button aria-label="close more" className="absolute inset-0" type="button" onClick={onClose} />
       <div className="pointer-events-none absolute inset-x-0 bottom-28 flex justify-center px-5">
         <div className="glass pointer-events-auto w-full max-w-xs rounded-[1.6rem] p-4 text-sm lowercase leading-9 text-[color:var(--ink)]">
-        <button className="block w-full text-left hover:text-[color:var(--kept)]" type="button" onClick={onCopy}>
-          {copied ? "copied" : "copy poem text"}
-        </button>
-        <a
-          className="block hover:text-[color:var(--kept)]"
-          href={poem.poemUrl}
-          rel="noreferrer"
-          target="_blank"
-        >
-          read on {sourceLabel}
-        </a>
-        <button
-          className="block w-full text-left hover:text-[color:var(--kept)]"
-          type="button"
-          onClick={() => {
-            onClose();
-            onOpenAnchors();
-          }}
-        >
-          add things i like
-        </button>
-        {poem.authorUrl ? (
+          {curation ? (
+            <div className="mb-2 border-b border-black/5 pb-2 text-[0.72rem] leading-5 tracking-[0.08em] text-[color:var(--muted)] dark:border-white/10">
+              <p className="uppercase">{curation.mode === "curated" ? "curated" : "curation unavailable"}</p>
+              {curation.mode !== "curated" && curatorEnabled === false ? (
+                <p className="mt-1 normal-case tracking-normal">hugging face key is not set on vercel yet.</p>
+              ) : null}
+              {curation.rationale ? <p className="mt-1 normal-case tracking-normal">{curation.rationale}</p> : null}
+            </div>
+          ) : null}
+          <button className="block w-full text-left hover:text-[color:var(--kept)]" type="button" onClick={onCopy}>
+            {copied ? "copied" : "copy poem text"}
+          </button>
           <a
             className="block hover:text-[color:var(--kept)]"
-            href={poem.authorUrl}
+            href={poem.poemUrl}
             rel="noreferrer"
             target="_blank"
           >
-            about {poem.author.toLowerCase()}
+            read on {sourceLabel}
           </a>
-        ) : null}
+          {poem.authorUrl ? (
+            <a
+              className="block hover:text-[color:var(--kept)]"
+              href={poem.authorUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              about {poem.author.toLowerCase()}
+            </a>
+          ) : null}
         </div>
       </div>
     </div>

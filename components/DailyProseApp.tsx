@@ -25,13 +25,16 @@ export function DailyProseApp() {
   const [showLiked, setShowLiked] = useState(false);
   const [isFading, setIsFading] = useState(false);
   const [busy, setBusy] = useState(true);
+  const [curation, setCuration] = useState<{ mode: "curated" | "fallback"; rationale?: string; tasteUpdate?: string } | null>(
+    null,
+  );
+  const [curatorEnabled, setCuratorEnabled] = useState<boolean | null>(null);
   const sessionSeenRef = useRef<string[]>([]);
 
   const date = useMemo(() => todayKey(), []);
   const dateLabel = useMemo(() => formatToday(date), [date]);
   const activeEntry = state?.ledger.find((entry) => entry.key === visiblePoem?.key);
   const likes = activeEntry?.likes ?? (activeEntry?.status === "kept" ? 1 : 0);
-  const dislikes = activeEntry?.dislikes ?? (activeEntry?.status === "dismissed" ? 1 : 0);
 
   const commitState = useCallback((next: AppState) => {
     setState(next);
@@ -55,6 +58,11 @@ export function DailyProseApp() {
         }
 
         const poem = picked.poem;
+        setCuration(
+          picked.rationale?.trim()
+            ? { mode: "curated", rationale: picked.rationale.trim(), tasteUpdate: picked.tasteUpdate?.trim() }
+            : { mode: "fallback" },
+        );
         const entry = entryFromPoem(poem, date);
         const nextState: AppState = {
           ...baseState,
@@ -79,6 +87,18 @@ export function DailyProseApp() {
     [commitState, date],
   );
 
+  const readCuratorStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/curate/status", { headers: { Accept: "application/json" } });
+      if (!response.ok) return;
+      const data = (await response.json()) as { enabled?: unknown };
+      if (typeof data.enabled !== "boolean") return;
+      setCuratorEnabled(data.enabled);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     const boot = async () => {
       const stored = getState();
@@ -88,6 +108,8 @@ export function DailyProseApp() {
           : undefined;
 
       setState(stored);
+      void syncAnchors(stored, commitState);
+      void readCuratorStatus();
 
       if (todaysEntry) {
         const poem = await hydrateEntry(todaysEntry);
@@ -101,7 +123,7 @@ export function DailyProseApp() {
     };
 
     boot();
-  }, [chooseFreshPoem, date]);
+  }, [chooseFreshPoem, commitState, date, readCuratorStatus]);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -109,60 +131,38 @@ export function DailyProseApp() {
     }
   }, []);
 
-  const cycleReaction = (kind: "like" | "dislike") => {
+  const cycleLike = () => {
     if (!state || !visiblePoem) return;
 
     const entry = state.ledger.find((item) => item.key === visiblePoem.key);
     if (!entry) return;
 
     const currentLikes = entry.likes ?? (entry.status === "kept" ? 1 : 0);
-    const currentDislikes = entry.dislikes ?? (entry.status === "dismissed" ? 1 : 0);
-    const cap = 5;
-
-    const nextLikes = kind === "like" ? ((currentLikes + 1) % (cap + 1)) : currentLikes;
-    const nextDislikes = kind === "dislike" ? ((currentDislikes + 1) % (cap + 1)) : currentDislikes;
+    const cap = 3;
+    const nextLikes = (currentLikes + 1) % (cap + 1);
 
     const deltaLikes = nextLikes - currentLikes;
-    const deltaDislikes = nextDislikes - currentDislikes;
 
     const updatedEntry: LedgerEntry = {
       ...entry,
       likes: nextLikes,
-      dislikes: nextDislikes,
-      status: nextLikes > 0 ? "kept" : nextDislikes > 0 ? "dismissed" : "unread",
+      status: nextLikes > 0 ? "kept" : "unread",
     };
 
     const nextLedger = state.ledger.map((item) => (item.key === entry.key ? updatedEntry : item));
-    const scored = applyFeedbackDelta({ ...state, ledger: nextLedger }, updatedEntry, deltaLikes, deltaDislikes);
+    const scored = applyFeedbackDelta({ ...state, ledger: nextLedger }, updatedEntry, deltaLikes);
     commitState(scored);
 
-    if (kind === "like") {
-      setShowLiked(true);
-      window.setTimeout(() => setShowLiked(false), 1600);
-    }
+    setShowLiked(true);
+    window.setTimeout(() => setShowLiked(false), 1600);
   };
 
   const handleNext = async () => {
     if (!visiblePoem || !state) return;
-    // "next" is a gentle negative signal: you actively asked for something else.
-    // We record a single dislike tick (unless you already reacted).
-    const entry = state.ledger.find((item) => item.key === visiblePoem.key);
-    let markedState = state;
-    if (entry) {
-      const currentLikes = entry.likes ?? (entry.status === "kept" ? 1 : 0);
-      const currentDislikes = entry.dislikes ?? (entry.status === "dismissed" ? 1 : 0);
-      if (currentLikes === 0 && currentDislikes === 0) {
-        const updated: LedgerEntry = { ...entry, dislikes: 1, likes: 0, status: "dismissed" };
-        const nextLedger = state.ledger.map((item) => (item.key === entry.key ? updated : item));
-        markedState = applyFeedbackDelta({ ...state, ledger: nextLedger }, updated, 0, 1);
-        commitState(markedState);
-      }
-    }
-
-    const nextSource = visiblePoem.source === "contemporary" ? "canon" : "contemporary";
+    const markedState = state;
 
     sessionSeenRef.current = [...sessionSeenRef.current, visiblePoem.key];
-    await chooseFreshPoem(markedState, nextSource);
+    await chooseFreshPoem(markedState);
   };
 
   const handleLedgerSelect = async (entry: LedgerEntry) => {
@@ -227,6 +227,7 @@ export function DailyProseApp() {
           open={ledgerOpen}
           onClose={() => setLedgerOpen(false)}
           onSelect={handleLedgerSelect}
+          onOpenAnchors={() => setAnchorsOpen(true)}
           onUnlink={(entry) => {
             if (!state) return;
             if (!window.confirm('do you want to remove this poem from "liked poems"?')) return;
@@ -240,11 +241,11 @@ export function DailyProseApp() {
             const updated: LedgerEntry = {
               ...current,
               likes: 0,
-              status: (current.dislikes ?? 0) > 0 ? "dismissed" : "unread",
+              status: "unread",
             };
 
             const nextLedger = state.ledger.map((e) => (e.key === current.key ? updated : e));
-            const scored = applyFeedbackDelta({ ...state, ledger: nextLedger }, updated, -currentLikes, 0);
+            const scored = applyFeedbackDelta({ ...state, ledger: nextLedger }, updated, -currentLikes);
             commitState(scored);
           }}
         />
@@ -257,56 +258,30 @@ export function DailyProseApp() {
           copied={copied}
           onCopy={handleCopy}
           onClose={() => setMoreOpen(false)}
-          onOpenAnchors={() => setAnchorsOpen(true)}
+          curation={curation ?? undefined}
+          curatorEnabled={curatorEnabled}
         />
       ) : null}
 
       {state ? (
         <TasteAnchorsOverlay
           open={anchorsOpen}
-          libraryId={state.prefs.libraryId ?? ""}
           anchors={state.prefs.tasteAnchors ?? []}
           onClose={() => setAnchorsOpen(false)}
-          onSetLibraryId={(libraryId) => {
-            const id = libraryId || crypto.randomUUID();
-            const next: AppState = { ...state, prefs: { ...state.prefs, libraryId: id } };
-            commitState(next);
-            void syncAnchors(id, next, commitState);
+          onAdd={async (text) => {
+            if (!state) return;
+            const anchor = { id: crypto.randomUUID(), text, createdAt: new Date().toISOString() };
+            await upsertAnchor(anchor, state, commitState);
           }}
-          onAdd={async (anchor) => {
-            const id = ensureLibraryId(state, commitState);
-            const nextLocal: AppState = {
-              ...state,
-              prefs: { ...state.prefs, libraryId: id, tasteAnchors: [anchor, ...(state.prefs.tasteAnchors ?? [])] },
-            };
-            commitState(nextLocal);
-            await upsertAnchor(id, anchor, commitState, nextLocal);
-          }}
-          onUpdate={async (anchor) => {
-            const id = ensureLibraryId(state, commitState);
-            const nextLocal: AppState = {
-              ...state,
-              prefs: {
-                ...state.prefs,
-                libraryId: id,
-                tasteAnchors: (state.prefs.tasteAnchors ?? []).map((a) => (a.id === anchor.id ? anchor : a)),
-              },
-            };
-            commitState(nextLocal);
-            await upsertAnchor(id, anchor, commitState, nextLocal);
+          onUpdate={async (id, text) => {
+            if (!state) return;
+            const existing = (state.prefs.tasteAnchors ?? []).find((a) => a.id === id);
+            const anchor = { id, text, createdAt: existing?.createdAt ?? new Date().toISOString() };
+            await upsertAnchor(anchor, state, commitState);
           }}
           onRemove={async (anchorId) => {
-            const id = ensureLibraryId(state, commitState);
-            const nextLocal: AppState = {
-              ...state,
-              prefs: {
-                ...state.prefs,
-                libraryId: id,
-                tasteAnchors: (state.prefs.tasteAnchors ?? []).filter((a) => a.id !== anchorId),
-              },
-            };
-            commitState(nextLocal);
-            await deleteAnchor(id, anchorId, commitState, nextLocal);
+            if (!state) return;
+            await deleteAnchor(anchorId, state, commitState);
           }}
         />
       ) : null}
@@ -315,10 +290,8 @@ export function DailyProseApp() {
         disabled={busy}
         showNext={!archiveView}
         likes={likes}
-        dislikes={dislikes}
         showLiked={showLiked}
-        onLike={() => cycleReaction("like")}
-        onDislike={() => cycleReaction("dislike")}
+        onLike={cycleLike}
         onMore={() => setMoreOpen((open) => !open)}
         onNext={handleNext}
       />
@@ -373,77 +346,59 @@ function formatToday(date: string): string {
   }).format(new Date(`${date}T12:00:00`));
 }
 
-function ensureLibraryId(state: AppState, commit: (s: AppState) => void): string {
-  const existing = state.prefs.libraryId?.trim();
-  if (existing) return existing;
-
-  const id = crypto.randomUUID();
-  commit({ ...state, prefs: { ...state.prefs, libraryId: id } });
-  return id;
-}
-
-async function syncAnchors(libraryId: string, state: AppState, commit: (s: AppState) => void) {
+async function syncAnchors(state: AppState, commit: (s: AppState) => void) {
   try {
-    const response = await fetch(`/api/anchors?libraryId=${encodeURIComponent(libraryId)}`, {
-      headers: { Accept: "application/json" },
-    });
+    const response = await fetch("/api/anchors", { headers: { Accept: "application/json" } });
     if (!response.ok) return;
-    const data = (await response.json()) as { anchors?: TasteAnchor[] };
+    const data = (await response.json()) as { anchors?: unknown };
     if (!Array.isArray(data.anchors)) return;
 
-    commit({
-      ...state,
-      prefs: {
-        ...state.prefs,
-        libraryId,
-        tasteAnchors: data.anchors,
-      },
-    });
+    commit({ ...state, prefs: { ...state.prefs, tasteAnchors: data.anchors as TasteAnchor[] } });
   } catch {
-    // keep local
+    // keep local cache if offline / unavailable
   }
 }
 
-async function upsertAnchor(
-  libraryId: string,
-  anchor: TasteAnchor,
-  commit: (s: AppState) => void,
-  state: AppState,
-) {
+async function upsertAnchor(anchor: { id: string; text: string; createdAt: string }, state: AppState, commit: (s: AppState) => void) {
+  const optimistic: AppState = {
+    ...state,
+    prefs: { ...state.prefs, tasteAnchors: [anchor, ...(state.prefs.tasteAnchors ?? []).filter((a) => a.id !== anchor.id)] },
+  };
+  commit(optimistic);
+
   try {
     const response = await fetch("/api/anchors", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ libraryId, anchor }),
+      body: JSON.stringify({ anchor }),
     });
     if (!response.ok) return;
-    const data = (await response.json()) as { anchors?: TasteAnchor[] };
+    const data = (await response.json()) as { anchors?: unknown };
     if (!Array.isArray(data.anchors)) return;
-
-    commit({ ...state, prefs: { ...state.prefs, libraryId, tasteAnchors: data.anchors } });
+    commit({ ...optimistic, prefs: { ...optimistic.prefs, tasteAnchors: data.anchors as TasteAnchor[] } });
   } catch {
-    // keep local
+    // keep optimistic
   }
 }
 
-async function deleteAnchor(
-  libraryId: string,
-  id: string,
-  commit: (s: AppState) => void,
-  state: AppState,
-) {
+async function deleteAnchor(id: string, state: AppState, commit: (s: AppState) => void) {
+  const optimistic: AppState = {
+    ...state,
+    prefs: { ...state.prefs, tasteAnchors: (state.prefs.tasteAnchors ?? []).filter((a) => a.id !== id) },
+  };
+  commit(optimistic);
+
   try {
     const response = await fetch("/api/anchors", {
       method: "DELETE",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ libraryId, id }),
+      body: JSON.stringify({ id }),
     });
     if (!response.ok) return;
-    const data = (await response.json()) as { anchors?: TasteAnchor[] };
+    const data = (await response.json()) as { anchors?: unknown };
     if (!Array.isArray(data.anchors)) return;
-
-    commit({ ...state, prefs: { ...state.prefs, libraryId, tasteAnchors: data.anchors } });
+    commit({ ...optimistic, prefs: { ...optimistic.prefs, tasteAnchors: data.anchors as TasteAnchor[] } });
   } catch {
-    // keep local
+    // keep optimistic
   }
 }

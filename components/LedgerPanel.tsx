@@ -7,9 +7,10 @@ type LedgerPanelProps = {
   onClose: () => void;
   onSelect: (entry: LedgerEntry) => void;
   onUnlink: (entry: LedgerEntry) => void;
+  onOpenAnchors: () => void;
 };
 
-export function LedgerPanel({ entries, open, onClose, onSelect, onUnlink }: LedgerPanelProps) {
+export function LedgerPanel({ entries, open, onClose, onSelect, onUnlink, onOpenAnchors }: LedgerPanelProps) {
   const ordered = entries
     .filter((entry) => (entry.likes ?? 0) > 0 || entry.status === "kept")
     .slice()
@@ -26,9 +27,21 @@ export function LedgerPanel({ entries, open, onClose, onSelect, onUnlink }: Ledg
             <h2 className="font-display text-3xl font-medium">liked so far</h2>
             <p className="mt-1 text-sm text-[color:var(--muted)]">{ordered.length} poems</p>
           </div>
-          <button className="text-sm lowercase text-[color:var(--muted)]" type="button" onClick={onClose}>
-            close
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              className="text-sm lowercase text-[color:var(--muted)] hover:text-[color:var(--ink)]"
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenAnchors();
+              }}
+            >
+              things i like
+            </button>
+            <button className="text-sm lowercase text-[color:var(--muted)]" type="button" onClick={onClose}>
+              close
+            </button>
+          </div>
         </div>
 
         <div className="max-h-[58dvh] overflow-y-auto pr-1">

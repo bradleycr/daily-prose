@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { earliestYearInText, isYearRecentEnough } from "./poetsorgYear";
 import type { ContemporaryPoem } from "./types";
 
 const POETS_ORG = "https://poets.org";
@@ -60,6 +61,18 @@ function parsePoemADay(html: string): ContemporaryPoem | null {
   const copyright = cleanText(
     $(".field--name-field-copyright, .copyright, .poem-copyright").first().text(),
   );
+
+  const yearSignal = earliestYearInText(
+    [
+      copyright,
+      cleanText(bodyNode.text()),
+      // Sometimes publication context lives outside the poem body on listing pages.
+      cleanText($("article").first().text()),
+    ].join("\n"),
+  );
+  if (typeof yearSignal === "number" && !isYearRecentEnough(yearSignal)) {
+    return null;
+  }
 
   return {
     title,

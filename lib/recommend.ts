@@ -1,6 +1,7 @@
 import { wikipediaLinkFor } from "./biography";
 import { centuryFor } from "./century";
 import { classifyForm } from "./form";
+import { earliestYearInText, minRecentPoetsOrgYear } from "./poetsorgYear";
 import { getCanonAuthors, getPoemsByAuthor } from "./poetrydb";
 import type { AppState, ContemporaryPoem, DisplayPoem, LedgerEntry, SourceKind } from "./types";
 
@@ -23,11 +24,15 @@ export async function pickPoem(
   const source = options.forceSource ?? chooseSource(state);
 
   if (source === "contemporary") {
-    const contemporary = await pickContemporary(seen);
-    if (contemporary) return { poem: contemporary };
+    // poets.org can occasionally fail or repeat; try twice before falling back.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const contemporary = await pickContemporary(seen);
+      if (contemporary) return { poem: contemporary };
+    }
   }
 
-  const candidates = await pickCanonCandidates(state, seen);
+  const allowOlderCanon = Math.random() < 0.02; // "once in a blue moon"
+  const candidates = await pickCanonCandidates(state, seen, { allowOlderCanon });
   if (!candidates.length) return { poem: null };
 
   const curated = await tryCuratePick(candidates, state);
@@ -76,17 +81,15 @@ export function applyFeedbackDelta(
   state: AppState,
   entry: LedgerEntry,
   deltaLikes: number,
-  deltaDislikes: number,
 ): AppState {
-  if (deltaLikes === 0 && deltaDislikes === 0) return state;
+  if (deltaLikes === 0) return state;
 
   const lineCount = entry.lines?.length ?? 24;
   const form = classifyForm(lineCount);
   const century = entry.source === "contemporary" ? "2000s" : centuryFor(entry.author);
 
-  // A like is a stronger signal than a dislike in this product (gentle, discovery-forward).
-  const authorDelta = deltaLikes * 1.6 + deltaDislikes * -1.0;
-  const traitDelta = deltaLikes * 0.9 + deltaDislikes * -0.55;
+  const authorDelta = deltaLikes * 1.6;
+  const traitDelta = deltaLikes * 0.9;
 
   return {
     ...state,
@@ -116,7 +119,9 @@ export function applyFeedbackDelta(
 function chooseSource(state: AppState): SourceKind {
   const canon = state.prefs.sourceScores.canon;
   const contemporary = state.prefs.sourceScores.contemporary;
-  const pCanon = sigmoid(canon - contemporary);
+  const preference = sigmoid(canon - contemporary); // 0..1
+  const baseCanon = 0.03;
+  const pCanon = Math.min(0.12, Math.max(0.01, baseCanon + preference * 0.06));
 
   return Math.random() < pCanon ? "canon" : "contemporary";
 }
@@ -133,12 +138,20 @@ async function pickContemporary(seen: Set<string>): Promise<DisplayPoem | null> 
     const key = poemKey("contemporary", poem.author, poem.title);
     if (seen.has(key)) return null;
 
+    const publishedYear = yearFromCopyright(poem.copyright);
+    // If we can infer a year from copyright, enforce the recency window strictly.
+    // If we can't infer a year, we still allow the poem (poets.org is overwhelmingly contemporary),
+    // but we avoid obviously old republications when the copyright line includes a year.
+    if (typeof publishedYear === "number" && publishedYear < minRecentPoetsOrgYear()) {
+      return null;
+    }
+
     return {
       key,
       title: poem.title,
       author: poem.author,
       source: "contemporary",
-      publishedYear: yearFromCopyright(poem.copyright),
+      publishedYear,
       htmlBody: poem.htmlBody,
       poemUrl: poem.poemUrl,
       authorUrl: poem.authorUrl,
@@ -151,15 +164,32 @@ async function pickContemporary(seen: Set<string>): Promise<DisplayPoem | null> 
 
 function yearFromCopyright(copyright: string | undefined): number | undefined {
   if (!copyright) return undefined;
-  const match = copyright.match(/\b(1[6-9]\d{2}|20\d{2})\b/);
-  if (!match) return undefined;
-  const year = Number(match[1]);
-  return Number.isFinite(year) ? year : undefined;
+  const year = earliestYearInText(copyright);
+  return typeof year === "number" ? year : undefined;
 }
 
-async function pickCanonCandidates(state: AppState, seen: Set<string>): Promise<DisplayPoem[]> {
+function authorCenturyStart(author: string): number {
+  const century = centuryFor(author); // e.g. "1800s"
+  const match = century.match(/^(\d{3})0s$/);
+  if (!match) return 1900;
+  return Number(match[1]) * 100;
+}
+
+async function pickCanonCandidates(
+  state: AppState,
+  seen: Set<string>,
+  options: { allowOlderCanon: boolean },
+): Promise<DisplayPoem[]> {
   const authors = await getCanonAuthors();
-  const sampledAuthors = sampleAuthors(authors, state, 22);
+  const modernOnly = options.allowOlderCanon
+    ? authors
+    : authors.filter((author) => {
+        // Approximate "recent" for canon via author-era buckets from `centuryFor`.
+        // Keep 1800s+ by default (still old poetry, but matches "last ~150 years" much better than 1500s/1600s).
+        return authorCenturyStart(author) >= 1800;
+      });
+
+  const sampledAuthors = sampleAuthors(modernOnly.length ? modernOnly : authors, state, 22);
   const candidates: DisplayPoem[] = [];
 
   // Fetch several authors in parallel, stop as soon as we have enough options.
@@ -184,7 +214,9 @@ async function pickCanonCandidates(state: AppState, seen: Set<string>): Promise<
         author: poem.author,
         source: "canon",
         lines: poem.lines,
-        poemUrl: `https://poetrydb.org/author/${encodeURIComponent(poem.author)}`,
+        // PoetryDB is an API (JSON), not a reader-friendly poem page.
+        // Link out to a human-readable search destination instead.
+        poemUrl: `https://www.poetryfoundation.org/search?query=${encodeURIComponent(`${poem.title} ${poem.author}`)}`,
         authorUrl: wikipediaLinkFor(poem.author),
       });
 
@@ -205,8 +237,7 @@ async function tryCuratePick(
 
     const history = state.ledger.slice(0, 120).map((entry) => ({
       id: entry.key,
-      status:
-        entry.likes > 0 ? "liked" : entry.dislikes > 0 ? "disliked" : entry.status === "dismissed" ? "disliked" : "neutral",
+      status: entry.likes > 0 ? "liked" : "neutral",
     }));
 
     const payload = {

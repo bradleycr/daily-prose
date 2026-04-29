@@ -42,7 +42,6 @@ export type UserPreferences = {
   seenPoemKeys: string[];
   tasteProfile?: string;
   tasteAnchors?: TasteAnchor[];
-  libraryId?: string;
 };
 
 export type TasteAnchor = {
@@ -60,8 +59,7 @@ export type LedgerEntry = {
   author: string;
   source: SourceKind;
   status: PoemStatus;
-  likes: number; // 0..5
-  dislikes: number; // 0..5
+  likes: number; // 0..3
   publishedYear?: number;
   lines?: string[];
   poemUrl?: string;

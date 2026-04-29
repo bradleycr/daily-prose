@@ -1,5 +1,6 @@
 import type { DisplayPoem } from "@/lib/types";
 import { LoadingGlyph } from "@/components/LoadingGlyph";
+import { centuryFor } from "@/lib/century";
 
 type PoemViewProps = {
   poem: DisplayPoem | null;
@@ -39,6 +40,8 @@ export function PoemView({
     );
   }
 
+  const dateHint = poem.publishedYear ? String(poem.publishedYear) : poem.source === "canon" ? centuryFor(poem.author) : "";
+
   return (
     <main
       className={`mx-auto w-full max-w-[38rem] px-7 pb-40 pt-[14vh] transition-opacity duration-[600ms] ease-out sm:px-8 lg:px-0 ${
@@ -52,8 +55,8 @@ export function PoemView({
           </h1>
           <p className="mt-2 text-[0.72rem] uppercase tracking-[0.16em] text-[color:var(--muted)]">
             by <span className="font-display italic normal-case tracking-[0.04em]">{poem.author}</span>
-            {poem.publishedYear ? (
-              <span className="normal-case tracking-[0.08em] text-[color:var(--muted)]"> · {poem.publishedYear}</span>
+            {dateHint ? (
+              <span className="normal-case tracking-[0.08em] text-[color:var(--muted)]">, {dateHint}</span>
             ) : null}
           </p>
         </div>
@@ -77,7 +80,7 @@ export function PoemView({
           dangerouslySetInnerHTML={{ __html: poem.htmlBody }}
         />
       ) : (
-        <pre className="poem">{(poem.lines ?? []).join("\n")}</pre>
+        <pre className="poem poem-fixed">{(poem.lines ?? []).join("\n")}</pre>
       )}
 
       {poem.copyright ? (
