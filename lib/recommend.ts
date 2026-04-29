@@ -9,19 +9,31 @@ type PickOptions = {
   sessionSeen?: string[];
 };
 
+export type PickResult = {
+  poem: DisplayPoem | null;
+  tasteUpdate?: string;
+  rationale?: string;
+};
+
 export async function pickPoem(
   state: AppState,
   options: PickOptions = {},
-): Promise<DisplayPoem | null> {
+): Promise<PickResult> {
   const seen = new Set([...state.prefs.seenPoemKeys, ...(options.sessionSeen ?? [])]);
   const source = options.forceSource ?? chooseSource(state);
 
   if (source === "contemporary") {
     const contemporary = await pickContemporary(seen);
-    if (contemporary) return contemporary;
+    if (contemporary) return { poem: contemporary };
   }
 
-  return pickCanon(state, seen);
+  const candidates = await pickCanonCandidates(state, seen);
+  if (!candidates.length) return { poem: null };
+
+  const curated = await tryCuratePick(candidates, state);
+  if (curated) return curated;
+
+  return { poem: scoreCandidates(candidates, state)[0] ?? null };
 }
 
 export function updatePreferenceForEntry(
@@ -95,7 +107,7 @@ async function pickContemporary(seen: Set<string>): Promise<DisplayPoem | null> 
   }
 }
 
-async function pickCanon(state: AppState, seen: Set<string>): Promise<DisplayPoem | null> {
+async function pickCanonCandidates(state: AppState, seen: Set<string>): Promise<DisplayPoem[]> {
   const authors = await getCanonAuthors();
   const sampledAuthors = sampleAuthors(authors, state, 22);
   const candidates: DisplayPoem[] = [];
@@ -130,7 +142,59 @@ async function pickCanon(state: AppState, seen: Set<string>): Promise<DisplayPoe
     }
   });
 
-  return scoreCandidates(candidates, state)[0] ?? null;
+  return candidates;
+}
+
+async function tryCuratePick(
+  candidates: DisplayPoem[],
+  state: AppState,
+): Promise<PickResult | null> {
+  try {
+    // Only curate when we have a real pool to choose from.
+    if (candidates.length < 4) return null;
+
+    const history = state.ledger.slice(0, 120).map((entry) => ({
+      id: entry.key,
+      status: entry.status === "kept" ? "liked" : entry.status === "dismissed" ? "disliked" : "neutral",
+    }));
+
+    const payload = {
+      candidates: candidates.slice(0, 18).map((poem) => ({
+        id: poem.key,
+        title: poem.title,
+        author: poem.author,
+        source: poem.source,
+        text: poem.htmlBody ? stripHtmlClient(poem.htmlBody) : (poem.lines ?? []).join("\n"),
+      })),
+      history,
+      tasteProfile: state.prefs.tasteProfile ?? "",
+    };
+
+    const response = await fetch("/api/curate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) return null;
+    const data = (await response.json()) as { selectedId: string; rationale: string; tasteUpdate: string };
+    const selected = candidates.find((poem) => poem.key === data.selectedId) ?? null;
+    if (!selected) return null;
+
+    return {
+      poem: selected,
+      rationale: data.rationale,
+      tasteUpdate: typeof data.tasteUpdate === "string" ? data.tasteUpdate.trim() : "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function stripHtmlClient(html: string): string {
+  const element = document.createElement("div");
+  element.innerHTML = html.replaceAll("<br>", "\n").replaceAll("</p>", "\n\n");
+  return element.textContent?.trim() ?? "";
 }
 
 async function mapLimit<T>(

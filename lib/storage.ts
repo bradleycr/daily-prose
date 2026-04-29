@@ -20,6 +20,7 @@ export function defaultState(): AppState {
         contemporary: 0,
       },
       seenPoemKeys: [],
+      tasteProfile: "",
     },
     ledger: [],
     todaySlot: null,
@@ -52,6 +53,7 @@ export function getState(): AppState {
           ...defaultState().prefs.sourceScores,
           ...parsed.prefs?.sourceScores,
         },
+        tasteProfile: parsed.prefs?.tasteProfile ?? defaultState().prefs.tasteProfile,
       },
     };
   } catch {

@@ -40,10 +40,10 @@ export function DailyProseApp() {
       setBusy(true);
       setIsFading(true);
 
-      const poem = await pickPoem(baseState, { forceSource, sessionSeen: sessionSeenRef.current });
+      const picked = await pickPoem(baseState, { forceSource, sessionSeen: sessionSeenRef.current });
 
       window.setTimeout(() => {
-        if (!poem) {
+        if (!picked.poem) {
           setTodayPoem(null);
           setVisiblePoem(null);
           setBusy(false);
@@ -51,6 +51,7 @@ export function DailyProseApp() {
           return;
         }
 
+        const poem = picked.poem;
         const entry = entryFromPoem(poem, date);
         const nextState: AppState = {
           ...baseState,
@@ -59,6 +60,7 @@ export function DailyProseApp() {
           prefs: {
             ...baseState.prefs,
             seenPoemKeys: Array.from(new Set([...baseState.prefs.seenPoemKeys, entry.key])),
+            tasteProfile: picked.tasteUpdate?.trim?.() ? picked.tasteUpdate.trim() : baseState.prefs.tasteProfile,
           },
         };
 

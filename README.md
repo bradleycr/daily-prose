@@ -16,6 +16,15 @@ Push the repository to GitHub, then import it into Vercel. The default build com
 
 GitHub Pages is not used because the poets.org pipe needs a server-side route. A fully static export would lose the contemporary poem source.
 
+## Optional: Hugging Face curator (taste model)
+
+If you want the app to choose from a small candidate pool using a taste-model agent, set:
+
+- `HUGGINGFACE_API_KEY` (required)
+- `HUGGINGFACE_MODEL` (optional; defaults are in `app/api/curate/route.ts`)
+
+See `.env.example`. Keys are server-only and never exposed to the client.
+
 ## Notes
 
 PoetryDB does not preserve special visual layouts for every canonical poem, so highly spatial works may not be perfectly faithful. Contemporary poem text is not stored long-term in localStorage; the ledger stores metadata and links back to poets.org.

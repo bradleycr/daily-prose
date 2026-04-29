@@ -39,6 +39,7 @@ export type UserPreferences = {
   centuryScores: Record<string, number>;
   sourceScores: Record<SourceKind, number>;
   seenPoemKeys: string[];
+  tasteProfile?: string;
 };
 
 export type LedgerEntry = {
