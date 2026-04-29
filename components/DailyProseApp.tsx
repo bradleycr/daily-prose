@@ -227,6 +227,26 @@ export function DailyProseApp() {
           open={ledgerOpen}
           onClose={() => setLedgerOpen(false)}
           onSelect={handleLedgerSelect}
+          onUnlink={(entry) => {
+            if (!state) return;
+            if (!window.confirm('do you want to remove this poem from "liked poems"?')) return;
+
+            const current = state.ledger.find((e) => e.key === entry.key);
+            if (!current) return;
+
+            const currentLikes = current.likes ?? (current.status === "kept" ? 1 : 0);
+            if (currentLikes <= 0) return;
+
+            const updated: LedgerEntry = {
+              ...current,
+              likes: 0,
+              status: (current.dislikes ?? 0) > 0 ? "dismissed" : "unread",
+            };
+
+            const nextLedger = state.ledger.map((e) => (e.key === current.key ? updated : e));
+            const scored = applyFeedbackDelta({ ...state, ledger: nextLedger }, updated, -currentLikes, 0);
+            commitState(scored);
+          }}
         />
       ) : null}
 
