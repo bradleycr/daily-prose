@@ -63,24 +63,39 @@ export async function fetchPoetsOrgPoemPage(url: string): Promise<ContemporaryPo
 function parsePoetsOrgPoemPage(html: string, url: string): ContemporaryPoem | null {
   const $ = cheerio.load(html);
 
-  const title = cleanText($("h1, article h1, .field--name-title").first().text());
-  const authorLink = $(
-    "a[href*='/poets/'], .field--name-field-author a, .poem-author a, article a[href*='/poets/']",
-  ).first();
+  const modernRoot = $("article.card--poem-full").first();
+
+  const title = cleanText(
+    modernRoot.length
+      ? modernRoot.find("h1").first().text()
+      : $("h1, article h1, .field--name-title").first().text(),
+  );
+
+  const authorLink = modernRoot.length
+    ? modernRoot.find("a[data-byline-author-name]").first().length
+      ? modernRoot.find("a[data-byline-author-name]").first()
+      : modernRoot.find(".field--field_author a[href^='/poet/']").first()
+    : $("a[href*='/poets/'], .field--name-field-author a, .poem-author a, article a[href*='/poets/']").first();
+
   const author = cleanText(authorLink.text());
-  const bodyNode = $(
-    ".field--name-field-poem-text, .poem__body, .poem-body, article .field--type-text-with-summary, .field--name-body",
-  ).first();
+
+  const bodyNode = modernRoot.length
+    ? modernRoot.find(".field--body").first()
+    : $(".field--name-field-poem-text, .poem__body, .poem-body, article .field--type-text-with-summary, .field--name-body").first();
 
   if (!title || !author || !bodyNode.length) return null;
 
-  const copyright = cleanText($(".field--name-field-copyright, .copyright, .poem-copyright").first().text());
+  const copyright = cleanText(
+    modernRoot.length
+      ? modernRoot.find(".field--field_credit, .field--name-field-copyright, .copyright, .poem-copyright").first().text()
+      : $(".field--name-field-copyright, .copyright, .poem-copyright").first().text(),
+  );
 
   const yearSignal = earliestYearInText(
     [
       copyright,
       cleanText(bodyNode.text()),
-      cleanText($("article").first().text()),
+      cleanText($('script[type="application/ld+json"]').first().text()),
     ].join("\n"),
   );
   if (typeof yearSignal === "number" && !isYearRecentEnough(yearSignal)) {

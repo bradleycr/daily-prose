@@ -1,5 +1,7 @@
 import * as cheerio from "cheerio";
+import { sanitizePoemHtml } from "./poetsorgHtml";
 import { fetchPoetsOrgPoemPage } from "./poetsorgDiscover";
+import { earliestYearInText, isYearRecentEnough } from "./poetsorgYear";
 import type { ContemporaryPoem } from "./types";
 
 const POETS_ORG = "https://poets.org";
@@ -25,6 +27,15 @@ export async function fetchTodaysContemporary(): Promise<ContemporaryPoem | null
     if (!response.ok) throw new Error("poets.org unavailable");
 
     const html = await response.text();
+
+    // Fast path: the landing page embeds today's poem (no extra network hop).
+    const embedded = parseTodaysPoemFromPoemADayHub(html);
+    if (embedded) {
+      cached = { expiresAt: Date.now() + CACHE_MS, poem: embedded };
+      return embedded;
+    }
+
+    // Fallback: older hub layouts that only link out to `/poem/...`.
     const poemUrl = resolveFeaturedPoemUrlFromPoemADay(html);
     if (!poemUrl) throw new Error("poem-a-day_parse_failed");
 
@@ -37,13 +48,52 @@ export async function fetchTodaysContemporary(): Promise<ContemporaryPoem | null
   }
 }
 
+function parseTodaysPoemFromPoemADayHub(html: string): ContemporaryPoem | null {
+  const $ = cheerio.load(html);
+
+  const article = $("#block-views-block-poem-a-day-landing-page-current-poem article, .daily-poem__poem article").first();
+  if (!article.length) return null;
+
+  const titleLink = article.find("h2 a, h3 a").first();
+  const title = cleanText(titleLink.text() || article.attr("data-poem-title") || "");
+  const poemHref = titleLink.attr("href")?.trim();
+  if (!title || !poemHref) return null;
+
+  const bodyNode = article.find(".daily-poem__poem-text .field--body, .poem__body .field--body, .field--body").first();
+  if (!bodyNode.length) return null;
+
+  const authorLink = $(".poem-a-day__poem-author a[href^='/poet/'], .poem-a-day__poem-author a[itemprop='name']")
+    .first();
+  const author = cleanText(authorLink.text());
+  if (!author) return null;
+
+  const copyright = cleanText(article.find(".field--field_credit, .field--name-field-copyright, .copyright").first().text());
+
+  const yearSignal = earliestYearInText(
+    [copyright, cleanText(bodyNode.text()), cleanText($('script[type="application/ld+json"]').first().text())].join("\n"),
+  );
+  if (typeof yearSignal === "number" && !isYearRecentEnough(yearSignal)) {
+    return null;
+  }
+
+  return {
+    title,
+    author,
+    htmlBody: sanitizePoemHtml(bodyNode.html() ?? ""),
+    poemUrl: absoluteUrl(poemHref),
+    authorUrl: absoluteUrl(authorLink.attr("href") ?? `/poet/${slugify(author)}`),
+    copyright,
+    source: "poets.org",
+  };
+}
+
 function resolveFeaturedPoemUrlFromPoemADay(html: string): string | null {
   const $ = cheerio.load(html);
 
   // poets.org redesign: `/poem-a-day` is often a hub page; the actual poem is linked from `/poem/...`.
   const scored: Array<{ url: string; score: number }> = [];
 
-  $("a[href*='/poem/']").each((_, el) => {
+  $("#block-views-block-poem-a-day-landing-page-current-poem a[href^='/poem/']").each((_, el) => {
     const href = String($(el).attr("href") ?? "").trim();
     if (!href) return;
 
@@ -52,7 +102,7 @@ function resolveFeaturedPoemUrlFromPoemADay(html: string): string | null {
     if (normalized.includes("/print") || normalized.includes("/embed")) return;
 
     const label = cleanText($(el).text());
-    const score = label.length; // hub pages usually include a real title on the primary poem link.
+    const score = label.length;
 
     scored.push({ url: normalized, score });
   });
@@ -77,4 +127,8 @@ function absoluteUrl(href: string): string {
 
 function cleanText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
+}
+
+function slugify(text: string): string {
+  return text.toLowerCase().replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-");
 }
