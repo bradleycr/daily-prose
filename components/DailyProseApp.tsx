@@ -9,7 +9,7 @@ import { LoadingOverlay } from "@/components/LoadingOverlay";
 import { MoreOverlay } from "@/components/MoreOverlay";
 import { PoemView } from "@/components/PoemView";
 import { displayFromEntry, entryFromPoem, getState, saveState, todayKey } from "@/lib/storage";
-import { pickPoem, updatePreferenceForEntry } from "@/lib/recommend";
+import { applyFeedbackDelta, pickPoem } from "@/lib/recommend";
 import type { AppState, DisplayPoem, LedgerEntry, SourceKind } from "@/lib/types";
 
 export function DailyProseApp() {
@@ -20,7 +20,7 @@ export function DailyProseApp() {
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [showKept, setShowKept] = useState(false);
+  const [showLiked, setShowLiked] = useState(false);
   const [isFading, setIsFading] = useState(false);
   const [busy, setBusy] = useState(true);
   const sessionSeenRef = useRef<string[]>([]);
@@ -28,7 +28,8 @@ export function DailyProseApp() {
   const date = useMemo(() => todayKey(), []);
   const dateLabel = useMemo(() => formatToday(date), [date]);
   const activeEntry = state?.ledger.find((entry) => entry.key === visiblePoem?.key);
-  const kept = activeEntry?.status === "kept";
+  const likes = activeEntry?.likes ?? (activeEntry?.status === "kept" ? 1 : 0);
+  const dislikes = activeEntry?.dislikes ?? (activeEntry?.status === "dismissed" ? 1 : 0);
 
   const commitState = useCallback((next: AppState) => {
     setState(next);
@@ -106,35 +107,56 @@ export function DailyProseApp() {
     }
   }, []);
 
-  const markCurrent = (status: "kept" | "dismissed"): AppState | null => {
-    if (!state || !visiblePoem) return null;
+  const cycleReaction = (kind: "like" | "dislike") => {
+    if (!state || !visiblePoem) return;
 
     const entry = state.ledger.find((item) => item.key === visiblePoem.key);
-    if (!entry) return state;
+    if (!entry) return;
 
-    const alreadyMarked = entry.status === status;
-    const markedLedger = state.ledger.map((item) =>
-      item.key === entry.key ? { ...item, status } : item,
-    );
-    const markedState = { ...state, ledger: markedLedger };
-    const nextState = alreadyMarked
-      ? markedState
-      : updatePreferenceForEntry(markedState, { ...entry, status }, status === "kept" ? "keep" : "dismiss");
+    const currentLikes = entry.likes ?? (entry.status === "kept" ? 1 : 0);
+    const currentDislikes = entry.dislikes ?? (entry.status === "dismissed" ? 1 : 0);
+    const cap = 5;
 
-    commitState(nextState);
-    return nextState;
-  };
+    const nextLikes = kind === "like" ? ((currentLikes + 1) % (cap + 1)) : currentLikes;
+    const nextDislikes = kind === "dislike" ? ((currentDislikes + 1) % (cap + 1)) : currentDislikes;
 
-  const handleKeep = () => {
-    markCurrent("kept");
-    setShowKept(true);
-    window.setTimeout(() => setShowKept(false), 2000);
+    const deltaLikes = nextLikes - currentLikes;
+    const deltaDislikes = nextDislikes - currentDislikes;
+
+    const updatedEntry: LedgerEntry = {
+      ...entry,
+      likes: nextLikes,
+      dislikes: nextDislikes,
+      status: nextLikes > 0 ? "kept" : nextDislikes > 0 ? "dismissed" : "unread",
+    };
+
+    const nextLedger = state.ledger.map((item) => (item.key === entry.key ? updatedEntry : item));
+    const scored = applyFeedbackDelta({ ...state, ledger: nextLedger }, updatedEntry, deltaLikes, deltaDislikes);
+    commitState(scored);
+
+    if (kind === "like") {
+      setShowLiked(true);
+      window.setTimeout(() => setShowLiked(false), 1600);
+    }
   };
 
   const handleNext = async () => {
     if (!visiblePoem || !state) return;
+    // "next" is a gentle negative signal: you actively asked for something else.
+    // We record a single dislike tick (unless you already reacted).
+    const entry = state.ledger.find((item) => item.key === visiblePoem.key);
+    let markedState = state;
+    if (entry) {
+      const currentLikes = entry.likes ?? (entry.status === "kept" ? 1 : 0);
+      const currentDislikes = entry.dislikes ?? (entry.status === "dismissed" ? 1 : 0);
+      if (currentLikes === 0 && currentDislikes === 0) {
+        const updated: LedgerEntry = { ...entry, dislikes: 1, likes: 0, status: "dismissed" };
+        const nextLedger = state.ledger.map((item) => (item.key === entry.key ? updated : item));
+        markedState = applyFeedbackDelta({ ...state, ledger: nextLedger }, updated, 0, 1);
+        commitState(markedState);
+      }
+    }
 
-    const markedState = markCurrent("dismissed") ?? state;
     const nextSource = visiblePoem.source === "contemporary" ? "canon" : "contemporary";
 
     sessionSeenRef.current = [...sessionSeenRef.current, visiblePoem.key];
@@ -217,10 +239,13 @@ export function DailyProseApp() {
       ) : null}
 
       <ActionPill
-        disabled={busy || archiveView}
-        kept={Boolean(kept)}
-        showKept={showKept}
-        onKeep={handleKeep}
+        disabled={busy}
+        disableNext={archiveView}
+        likes={likes}
+        dislikes={dislikes}
+        showLiked={showLiked}
+        onLike={() => cycleReaction("like")}
+        onDislike={() => cycleReaction("dislike")}
         onMore={() => setMoreOpen((open) => !open)}
         onNext={handleNext}
       />

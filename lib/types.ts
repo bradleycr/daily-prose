@@ -49,6 +49,8 @@ export type LedgerEntry = {
   author: string;
   source: SourceKind;
   status: PoemStatus;
+  likes: number; // 0..5
+  dislikes: number; // 0..5
   lines?: string[];
   poemUrl?: string;
   authorUrl?: string;

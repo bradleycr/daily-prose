@@ -42,6 +42,11 @@ export function getState(): AppState {
     return {
       ...defaultState(),
       ...parsed,
+      ledger: (parsed.ledger ?? []).map((entry) => ({
+        ...entry,
+        likes: typeof entry.likes === "number" ? entry.likes : entry.status === "kept" ? 1 : 0,
+        dislikes: typeof entry.dislikes === "number" ? entry.dislikes : entry.status === "dismissed" ? 1 : 0,
+      })),
       prefs: {
         ...defaultState().prefs,
         ...parsed.prefs,
@@ -78,6 +83,8 @@ export function entryFromPoem(poem: DisplayPoem, date: string): LedgerEntry {
     author: poem.author,
     source: poem.source,
     status: "unread",
+    likes: 0,
+    dislikes: 0,
     lines: poem.source === "canon" ? poem.lines : undefined,
     poemUrl: poem.poemUrl,
     authorUrl: poem.authorUrl,

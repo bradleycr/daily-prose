@@ -72,6 +72,47 @@ export function updatePreferenceForEntry(
   };
 }
 
+export function applyFeedbackDelta(
+  state: AppState,
+  entry: LedgerEntry,
+  deltaLikes: number,
+  deltaDislikes: number,
+): AppState {
+  if (deltaLikes === 0 && deltaDislikes === 0) return state;
+
+  const lineCount = entry.lines?.length ?? 24;
+  const form = classifyForm(lineCount);
+  const century = entry.source === "contemporary" ? "2000s" : centuryFor(entry.author);
+
+  // A like is a stronger signal than a dislike in this product (gentle, discovery-forward).
+  const authorDelta = deltaLikes * 1.6 + deltaDislikes * -1.0;
+  const traitDelta = deltaLikes * 0.9 + deltaDislikes * -0.55;
+
+  return {
+    ...state,
+    prefs: {
+      ...state.prefs,
+      authorScores: {
+        ...state.prefs.authorScores,
+        [entry.author]: (state.prefs.authorScores[entry.author] ?? 0) + authorDelta,
+      },
+      formScores: {
+        ...state.prefs.formScores,
+        [form]: (state.prefs.formScores[form] ?? 0) + traitDelta,
+      },
+      centuryScores: {
+        ...state.prefs.centuryScores,
+        [century]: (state.prefs.centuryScores[century] ?? 0) + traitDelta,
+      },
+      sourceScores: {
+        ...state.prefs.sourceScores,
+        [entry.source]: (state.prefs.sourceScores[entry.source] ?? 0) + traitDelta,
+      },
+      seenPoemKeys: unique([...state.prefs.seenPoemKeys, entry.key]),
+    },
+  };
+}
+
 function chooseSource(state: AppState): SourceKind {
   const canon = state.prefs.sourceScores.canon;
   const contemporary = state.prefs.sourceScores.contemporary;
@@ -155,7 +196,8 @@ async function tryCuratePick(
 
     const history = state.ledger.slice(0, 120).map((entry) => ({
       id: entry.key,
-      status: entry.status === "kept" ? "liked" : entry.status === "dismissed" ? "disliked" : "neutral",
+      status:
+        entry.likes > 0 ? "liked" : entry.dislikes > 0 ? "disliked" : entry.status === "dismissed" ? "disliked" : "neutral",
     }));
 
     const payload = {

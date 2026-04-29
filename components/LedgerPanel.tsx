@@ -9,7 +9,7 @@ type LedgerPanelProps = {
 
 export function LedgerPanel({ entries, open, onClose, onSelect }: LedgerPanelProps) {
   const ordered = entries
-    .filter((entry) => entry.status === "kept")
+    .filter((entry) => (entry.likes ?? 0) > 0 || entry.status === "kept")
     .slice()
     .sort((a, b) => b.date.localeCompare(a.date));
 
@@ -48,7 +48,7 @@ export function LedgerPanel({ entries, open, onClose, onSelect }: LedgerPanelPro
                   <span className="block font-display text-sm italic text-[color:var(--muted)]">{entry.author}</span>
                 </span>
                 <span className="text-center text-[color:var(--muted)]">
-                  {entry.status === "kept" ? "♡" : entry.status === "dismissed" ? "○" : "·"}
+                  {(entry.likes ?? 0) > 0 ? "♡" : entry.status === "dismissed" ? "○" : "·"}
                 </span>
               </button>
             ))
