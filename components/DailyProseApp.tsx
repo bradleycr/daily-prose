@@ -8,6 +8,7 @@ import { LedgerPanel } from "@/components/LedgerPanel";
 import { LoadingOverlay } from "@/components/LoadingOverlay";
 import { MoreOverlay } from "@/components/MoreOverlay";
 import { PoemView } from "@/components/PoemView";
+import { TasteAnchorsOverlay } from "@/components/TasteAnchorsOverlay";
 import { displayFromEntry, entryFromPoem, getState, saveState, todayKey } from "@/lib/storage";
 import { applyFeedbackDelta, pickPoem } from "@/lib/recommend";
 import type { AppState, DisplayPoem, LedgerEntry, SourceKind } from "@/lib/types";
@@ -19,6 +20,7 @@ export function DailyProseApp() {
   const [archiveView, setArchiveView] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [anchorsOpen, setAnchorsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showLiked, setShowLiked] = useState(false);
   const [isFading, setIsFading] = useState(false);
@@ -235,6 +237,35 @@ export function DailyProseApp() {
           copied={copied}
           onCopy={handleCopy}
           onClose={() => setMoreOpen(false)}
+          onOpenAnchors={() => setAnchorsOpen(true)}
+        />
+      ) : null}
+
+      {state ? (
+        <TasteAnchorsOverlay
+          open={anchorsOpen}
+          anchors={state.prefs.tasteAnchors ?? []}
+          onClose={() => setAnchorsOpen(false)}
+          onAdd={(anchor) => {
+            const next: AppState = {
+              ...state,
+              prefs: {
+                ...state.prefs,
+                tasteAnchors: [anchor, ...(state.prefs.tasteAnchors ?? [])].slice(0, 24),
+              },
+            };
+            commitState(next);
+          }}
+          onRemove={(id) => {
+            const next: AppState = {
+              ...state,
+              prefs: {
+                ...state.prefs,
+                tasteAnchors: (state.prefs.tasteAnchors ?? []).filter((a) => a.id !== id),
+              },
+            };
+            commitState(next);
+          }}
         />
       ) : null}
 

@@ -40,6 +40,15 @@ export type UserPreferences = {
   sourceScores: Record<SourceKind, number>;
   seenPoemKeys: string[];
   tasteProfile?: string;
+  tasteAnchors?: TasteAnchor[];
+};
+
+export type TasteAnchor = {
+  id: string;
+  title?: string;
+  author?: string;
+  text: string;
+  createdAt: string; // ISO
 };
 
 export type LedgerEntry = {

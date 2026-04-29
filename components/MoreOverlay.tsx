@@ -6,9 +6,10 @@ type MoreOverlayProps = {
   copied: boolean;
   onCopy: () => void;
   onClose: () => void;
+  onOpenAnchors: () => void;
 };
 
-export function MoreOverlay({ poem, open, copied, onCopy, onClose }: MoreOverlayProps) {
+export function MoreOverlay({ poem, open, copied, onCopy, onClose, onOpenAnchors }: MoreOverlayProps) {
   if (!open) return null;
 
   const sourceLabel = poem.source === "canon" ? "poetrydb.org" : "poets.org";
@@ -29,6 +30,16 @@ export function MoreOverlay({ poem, open, copied, onCopy, onClose }: MoreOverlay
         >
           read on {sourceLabel}
         </a>
+        <button
+          className="block w-full text-left hover:text-[color:var(--kept)]"
+          type="button"
+          onClick={() => {
+            onClose();
+            onOpenAnchors();
+          }}
+        >
+          add things i like
+        </button>
         {poem.authorUrl ? (
           <a
             className="block hover:text-[color:var(--kept)]"

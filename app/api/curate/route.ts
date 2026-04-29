@@ -22,6 +22,16 @@ const BodySchema = z.object({
     }),
   ),
   tasteProfile: z.string().optional(),
+  tasteAnchors: z
+    .array(
+      z.object({
+        id: z.string(),
+        title: z.string().optional(),
+        author: z.string().optional(),
+        text: z.string(),
+      }),
+    )
+    .optional(),
 });
 
 const OutputSchema = z.object({
@@ -115,6 +125,17 @@ function buildPrompt(input: z.infer<typeof BodySchema>): string {
 
   if (input.tasteProfile) {
     lines.push("INFERRED TASTE PROFILE:", input.tasteProfile.trim(), "");
+  }
+
+  if (input.tasteAnchors && input.tasteAnchors.length > 0) {
+    lines.push("USER-LOVED EXAMPLES (anchors):");
+    for (const a of input.tasteAnchors.slice(0, 10)) {
+      lines.push(
+        `- ${a.title ?? "untitled"}${a.author ? ` · ${a.author}` : ""}`,
+        truncate(a.text.trim(), 900),
+        "",
+      );
+    }
   }
 
   lines.push("HISTORY (id -> status):");

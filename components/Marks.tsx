@@ -60,19 +60,18 @@ export function DislikeMark({ className }: MarkProps) {
   return (
     <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24">
       <path
-        d="M7.2 8.2c2.5 2.5 5.1 5.1 9.6 9.6"
+        d="M12 6.5v10.2"
         stroke="currentColor"
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth="1.5"
       />
       <path
-        d="M16.9 8.8c-1.4-.2-2.9-.2-4.4 0"
+        d="M8.3 13.3 12 16.9l3.7-3.6"
         stroke="currentColor"
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth="1.5"
-        opacity="0.9"
       />
     </svg>
   );

@@ -17,10 +17,12 @@ export function defaultState(): AppState {
       centuryScores: {},
       sourceScores: {
         canon: 0,
-        contemporary: 0,
+        contemporary: 1,
       },
       seenPoemKeys: [],
-      tasteProfile: "",
+      tasteProfile:
+        "prefers contemporary, genre-bending work with emotional precision. tends to dislike conventional love poems. likes: rumi (you wake the dead to life), charles bukowski, rainer maria rilke, emily dickinson, and some shakespeare sonnets (esp. sonnet 60).",
+      tasteAnchors: [],
     },
     ledger: [],
     todaySlot: null,
@@ -59,6 +61,7 @@ export function getState(): AppState {
           ...parsed.prefs?.sourceScores,
         },
         tasteProfile: parsed.prefs?.tasteProfile ?? defaultState().prefs.tasteProfile,
+        tasteAnchors: Array.isArray(parsed.prefs?.tasteAnchors) ? parsed.prefs?.tasteAnchors : [],
       },
     };
   } catch {

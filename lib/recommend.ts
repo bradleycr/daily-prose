@@ -210,6 +210,7 @@ async function tryCuratePick(
       })),
       history,
       tasteProfile: state.prefs.tasteProfile ?? "",
+      tasteAnchors: (state.prefs.tasteAnchors ?? []).slice(0, 12),
     };
 
     const controller = new AbortController();
