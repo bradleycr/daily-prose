@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import type { ContemporaryPoem } from "@/lib/types";
 import { googleCseSearch } from "@/lib/googleCse";
+import { sanitizePoemHtml } from "@/lib/poetsorgHtml";
 import { earliestYearInText, isYearRecentEnough } from "@/lib/poetsorgYear";
 
 const POETS_ORG = "https://poets.org";
@@ -41,7 +42,7 @@ function normalizePoetsOrgUrl(url: string): string | null {
   return url;
 }
 
-async function fetchPoetsOrgPoemPage(url: string): Promise<ContemporaryPoem | null> {
+export async function fetchPoetsOrgPoemPage(url: string): Promise<ContemporaryPoem | null> {
   try {
     const response = await fetch(url, {
       headers: {
@@ -95,27 +96,6 @@ function parsePoetsOrgPoemPage(html: string, url: string): ContemporaryPoem | nu
     copyright,
     source: "poets.org",
   };
-}
-
-function sanitizePoemHtml(html: string): string {
-  const $ = cheerio.load(html, null, false);
-  const allowed = new Set(["em", "i", "br", "span", "p"]);
-
-  $("*").each((_, element) => {
-    const current = $(element);
-    const tagName = String(current.prop("tagName") ?? "").toLowerCase();
-
-    if (!allowed.has(tagName)) {
-      current.replaceWith(current.html() ?? current.text());
-      return;
-    }
-
-    for (const attr of Object.keys(current.attr() ?? {})) {
-      current.removeAttr(attr);
-    }
-  });
-
-  return $.html().trim();
 }
 
 function absoluteUrl(href: string): string {

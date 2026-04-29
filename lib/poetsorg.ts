@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { earliestYearInText, isYearRecentEnough } from "./poetsorgYear";
+import { fetchPoetsOrgPoemPage } from "./poetsorgDiscover";
 import type { ContemporaryPoem } from "./types";
 
 const POETS_ORG = "https://poets.org";
@@ -25,7 +25,10 @@ export async function fetchTodaysContemporary(): Promise<ContemporaryPoem | null
     if (!response.ok) throw new Error("poets.org unavailable");
 
     const html = await response.text();
-    const poem = parsePoemADay(html);
+    const poemUrl = resolveFeaturedPoemUrlFromPoemADay(html);
+    if (!poemUrl) throw new Error("poem-a-day_parse_failed");
+
+    const poem = await fetchPoetsOrgPoemPage(poemUrl);
     cached = { expiresAt: Date.now() + CACHE_MS, poem };
     return poem;
   } catch {
@@ -34,86 +37,38 @@ export async function fetchTodaysContemporary(): Promise<ContemporaryPoem | null
   }
 }
 
-function parsePoemADay(html: string): ContemporaryPoem | null {
+function resolveFeaturedPoemUrlFromPoemADay(html: string): string | null {
   const $ = cheerio.load(html);
-  const titleLink = $(
-    ".field--name-title a, h1 a, article h1 a, .view-poem-a-day h2 a",
-  ).first();
-  const titleNode = titleLink.length ? titleLink : $("h1, article h1, .field--name-title").first();
-  const title = cleanText(titleNode.text());
 
-  const poemHref =
-    titleLink.attr("href") ??
-    $("link[rel='canonical']").attr("href") ??
-    $("meta[property='og:url']").attr("content");
+  // poets.org redesign: `/poem-a-day` is often a hub page; the actual poem is linked from `/poem/...`.
+  const scored: Array<{ url: string; score: number }> = [];
 
-  const authorLink = $(
-    "a[href*='/poets/'], .field--name-field-author a, .poem-author a, article a[href*='/poets/']",
-  ).first();
-  const author = cleanText(authorLink.text());
+  $("a[href*='/poem/']").each((_, el) => {
+    const href = String($(el).attr("href") ?? "").trim();
+    if (!href) return;
 
-  const bodyNode = $(
-    ".field--name-field-poem-text, .poem__body, .poem-body, .field--name-body, article .field--type-text-with-summary",
-  ).first();
+    const normalized = href.startsWith("http") ? href : absoluteUrl(href);
+    if (!normalized.startsWith(`${POETS_ORG}/poem/`)) return;
+    if (normalized.includes("/print") || normalized.includes("/embed")) return;
 
-  if (!title || !author || !poemHref || !bodyNode.length) return null;
+    const label = cleanText($(el).text());
+    const score = label.length; // hub pages usually include a real title on the primary poem link.
 
-  const copyright = cleanText(
-    $(".field--name-field-copyright, .copyright, .poem-copyright").first().text(),
-  );
-
-  const yearSignal = earliestYearInText(
-    [
-      copyright,
-      cleanText(bodyNode.text()),
-      // Sometimes publication context lives outside the poem body on listing pages.
-      cleanText($("article").first().text()),
-    ].join("\n"),
-  );
-  if (typeof yearSignal === "number" && !isYearRecentEnough(yearSignal)) {
-    return null;
-  }
-
-  return {
-    title,
-    author,
-    htmlBody: sanitizePoemHtml(bodyNode.html() ?? ""),
-    poemUrl: absoluteUrl(poemHref),
-    authorUrl: absoluteUrl(authorLink.attr("href") ?? `/poets/${slugify(author)}`),
-    copyright,
-    source: "poets.org",
-  };
-}
-
-function sanitizePoemHtml(html: string): string {
-  const $ = cheerio.load(html, null, false);
-  const allowed = new Set(["em", "i", "br", "span", "p"]);
-
-  $("*").each((_, element) => {
-    const current = $(element);
-    const tagName = String(current.prop("tagName") ?? "").toLowerCase();
-
-    if (!allowed.has(tagName)) {
-      current.replaceWith(current.html() ?? current.text());
-      return;
-    }
-
-    const style = indentationStyle(current.attr("class") ?? "", current.text());
-    for (const attr of Object.keys(current.attr() ?? {})) {
-      current.removeAttr(attr);
-    }
-    if (style) current.attr("style", style);
+    scored.push({ url: normalized, score });
   });
 
-  return $.html().trim();
-}
+  scored.sort((a, b) => b.score - a.score);
 
-function indentationStyle(className: string, text: string): string {
-  const classIndent = className.match(/indent-?(\d+)?/i)?.[1];
-  const leadingSpaces = text.match(/^(\s+)/)?.[1]?.length ?? 0;
-  const level = Number(classIndent ?? Math.min(leadingSpaces, 8));
+  const byUrl = new Map<string, number>();
+  for (const item of scored) {
+    byUrl.set(item.url, Math.max(byUrl.get(item.url) ?? 0, item.score));
+  }
 
-  return level > 0 ? `padding-left:${Math.min(level, 8) * 0.75}em` : "";
+  const unique = [...byUrl.entries()].sort((a, b) => b[1] - a[1]);
+  const strong = unique.find(([, score]) => score >= 8)?.[0];
+  if (strong) return strong;
+
+  return unique[0]?.[0] ?? null;
 }
 
 function absoluteUrl(href: string): string {
@@ -122,8 +77,4 @@ function absoluteUrl(href: string): string {
 
 function cleanText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
-}
-
-function slugify(text: string): string {
-  return text.toLowerCase().replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-");
 }
