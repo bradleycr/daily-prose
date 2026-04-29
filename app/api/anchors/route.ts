@@ -64,8 +64,8 @@ export async function DELETE(req: Request) {
 async function readAnchorsFromGist(gistId: string) {
   try {
     const response = await fetch(`https://api.github.com/gists/${encodeURIComponent(gistId)}`, {
+      cache: "no-store",
       headers: { Accept: "application/vnd.github+json" },
-      next: { revalidate: 60 },
     });
     if (!response.ok) return [];
     const data = (await response.json()) as {
@@ -85,6 +85,7 @@ async function writeAnchorsToGist(input: { gistId: string; token: string; anchor
   try {
     const response = await fetch(`https://api.github.com/gists/${encodeURIComponent(input.gistId)}`, {
       method: "PATCH",
+      cache: "no-store",
       headers: {
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${input.token}`,
