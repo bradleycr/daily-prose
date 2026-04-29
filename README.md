@@ -25,6 +25,15 @@ If you want the app to choose from a small candidate pool using a taste-model ag
 
 See `.env.example`. Keys are server-only and never exposed to the client.
 
+## Taste anchors sync (communal)
+
+To make “things i like” persistent across devices (and shareable), add an Upstash Redis integration in Vercel, then set:
+
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
+
+Once configured, the app uses a shared **library id** (shown in “things i like”) so multiple devices can contribute.
+
 ## Notes
 
 PoetryDB does not preserve special visual layouts for every canonical poem, so highly spatial works may not be perfectly faithful. Contemporary poem text is not stored long-term in localStorage; the ledger stores metadata and links back to poets.org.

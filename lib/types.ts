@@ -41,6 +41,7 @@ export type UserPreferences = {
   seenPoemKeys: string[];
   tasteProfile?: string;
   tasteAnchors?: TasteAnchor[];
+  libraryId?: string;
 };
 
 export type TasteAnchor = {

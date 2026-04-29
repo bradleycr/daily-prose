@@ -23,6 +23,7 @@ export function defaultState(): AppState {
       tasteProfile:
         "prefers contemporary, genre-bending work with emotional precision. tends to dislike conventional love poems. likes: rumi (you wake the dead to life), charles bukowski, rainer maria rilke, emily dickinson, and some shakespeare sonnets (esp. sonnet 60).",
       tasteAnchors: [],
+      libraryId: "",
     },
     ledger: [],
     todaySlot: null,
@@ -62,6 +63,7 @@ export function getState(): AppState {
         },
         tasteProfile: parsed.prefs?.tasteProfile ?? defaultState().prefs.tasteProfile,
         tasteAnchors: Array.isArray(parsed.prefs?.tasteAnchors) ? parsed.prefs?.tasteAnchors : [],
+        libraryId: parsed.prefs?.libraryId ?? defaultState().prefs.libraryId,
       },
     };
   } catch {

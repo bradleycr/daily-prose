@@ -11,7 +11,7 @@ import { PoemView } from "@/components/PoemView";
 import { TasteAnchorsOverlay } from "@/components/TasteAnchorsOverlay";
 import { displayFromEntry, entryFromPoem, getState, saveState, todayKey } from "@/lib/storage";
 import { applyFeedbackDelta, pickPoem } from "@/lib/recommend";
-import type { AppState, DisplayPoem, LedgerEntry, SourceKind } from "@/lib/types";
+import type { AppState, DisplayPoem, LedgerEntry, SourceKind, TasteAnchor } from "@/lib/types";
 
 export function DailyProseApp() {
   const [state, setState] = useState<AppState | null>(null);
@@ -244,27 +244,49 @@ export function DailyProseApp() {
       {state ? (
         <TasteAnchorsOverlay
           open={anchorsOpen}
+          libraryId={state.prefs.libraryId ?? ""}
           anchors={state.prefs.tasteAnchors ?? []}
           onClose={() => setAnchorsOpen(false)}
-          onAdd={(anchor) => {
-            const next: AppState = {
-              ...state,
-              prefs: {
-                ...state.prefs,
-                tasteAnchors: [anchor, ...(state.prefs.tasteAnchors ?? [])].slice(0, 24),
-              },
-            };
+          onSetLibraryId={(libraryId) => {
+            const id = libraryId || crypto.randomUUID();
+            const next: AppState = { ...state, prefs: { ...state.prefs, libraryId: id } };
             commitState(next);
+            void syncAnchors(id, next, commitState);
           }}
-          onRemove={(id) => {
-            const next: AppState = {
+          onAdd={async (anchor) => {
+            const id = ensureLibraryId(state, commitState);
+            const nextLocal: AppState = {
+              ...state,
+              prefs: { ...state.prefs, libraryId: id, tasteAnchors: [anchor, ...(state.prefs.tasteAnchors ?? [])] },
+            };
+            commitState(nextLocal);
+            await upsertAnchor(id, anchor, commitState, nextLocal);
+          }}
+          onUpdate={async (anchor) => {
+            const id = ensureLibraryId(state, commitState);
+            const nextLocal: AppState = {
               ...state,
               prefs: {
                 ...state.prefs,
-                tasteAnchors: (state.prefs.tasteAnchors ?? []).filter((a) => a.id !== id),
+                libraryId: id,
+                tasteAnchors: (state.prefs.tasteAnchors ?? []).map((a) => (a.id === anchor.id ? anchor : a)),
               },
             };
-            commitState(next);
+            commitState(nextLocal);
+            await upsertAnchor(id, anchor, commitState, nextLocal);
+          }}
+          onRemove={async (anchorId) => {
+            const id = ensureLibraryId(state, commitState);
+            const nextLocal: AppState = {
+              ...state,
+              prefs: {
+                ...state.prefs,
+                libraryId: id,
+                tasteAnchors: (state.prefs.tasteAnchors ?? []).filter((a) => a.id !== anchorId),
+              },
+            };
+            commitState(nextLocal);
+            await deleteAnchor(id, anchorId, commitState, nextLocal);
           }}
         />
       ) : null}
@@ -329,4 +351,79 @@ function formatToday(date: string): string {
     month: "short",
     day: "numeric",
   }).format(new Date(`${date}T12:00:00`));
+}
+
+function ensureLibraryId(state: AppState, commit: (s: AppState) => void): string {
+  const existing = state.prefs.libraryId?.trim();
+  if (existing) return existing;
+
+  const id = crypto.randomUUID();
+  commit({ ...state, prefs: { ...state.prefs, libraryId: id } });
+  return id;
+}
+
+async function syncAnchors(libraryId: string, state: AppState, commit: (s: AppState) => void) {
+  try {
+    const response = await fetch(`/api/anchors?libraryId=${encodeURIComponent(libraryId)}`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return;
+    const data = (await response.json()) as { anchors?: TasteAnchor[] };
+    if (!Array.isArray(data.anchors)) return;
+
+    commit({
+      ...state,
+      prefs: {
+        ...state.prefs,
+        libraryId,
+        tasteAnchors: data.anchors,
+      },
+    });
+  } catch {
+    // keep local
+  }
+}
+
+async function upsertAnchor(
+  libraryId: string,
+  anchor: TasteAnchor,
+  commit: (s: AppState) => void,
+  state: AppState,
+) {
+  try {
+    const response = await fetch("/api/anchors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ libraryId, anchor }),
+    });
+    if (!response.ok) return;
+    const data = (await response.json()) as { anchors?: TasteAnchor[] };
+    if (!Array.isArray(data.anchors)) return;
+
+    commit({ ...state, prefs: { ...state.prefs, libraryId, tasteAnchors: data.anchors } });
+  } catch {
+    // keep local
+  }
+}
+
+async function deleteAnchor(
+  libraryId: string,
+  id: string,
+  commit: (s: AppState) => void,
+  state: AppState,
+) {
+  try {
+    const response = await fetch("/api/anchors", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ libraryId, id }),
+    });
+    if (!response.ok) return;
+    const data = (await response.json()) as { anchors?: TasteAnchor[] };
+    if (!Array.isArray(data.anchors)) return;
+
+    commit({ ...state, prefs: { ...state.prefs, libraryId, tasteAnchors: data.anchors } });
+  } catch {
+    // keep local
+  }
 }
