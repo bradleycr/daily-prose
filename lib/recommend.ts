@@ -138,6 +138,7 @@ async function pickContemporary(seen: Set<string>): Promise<DisplayPoem | null> 
       title: poem.title,
       author: poem.author,
       source: "contemporary",
+      publishedYear: yearFromCopyright(poem.copyright),
       htmlBody: poem.htmlBody,
       poemUrl: poem.poemUrl,
       authorUrl: poem.authorUrl,
@@ -146,6 +147,14 @@ async function pickContemporary(seen: Set<string>): Promise<DisplayPoem | null> 
   } catch {
     return null;
   }
+}
+
+function yearFromCopyright(copyright: string | undefined): number | undefined {
+  if (!copyright) return undefined;
+  const match = copyright.match(/\b(1[6-9]\d{2}|20\d{2})\b/);
+  if (!match) return undefined;
+  const year = Number(match[1]);
+  return Number.isFinite(year) ? year : undefined;
 }
 
 async function pickCanonCandidates(state: AppState, seen: Set<string>): Promise<DisplayPoem[]> {

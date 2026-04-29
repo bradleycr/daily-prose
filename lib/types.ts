@@ -26,6 +26,7 @@ export type DisplayPoem = {
   title: string;
   author: string;
   source: SourceKind;
+  publishedYear?: number;
   lines?: string[];
   htmlBody?: string;
   poemUrl: string;
@@ -61,6 +62,7 @@ export type LedgerEntry = {
   status: PoemStatus;
   likes: number; // 0..5
   dislikes: number; // 0..5
+  publishedYear?: number;
   lines?: string[];
   poemUrl?: string;
   authorUrl?: string;

@@ -9,7 +9,7 @@ type ActionPillProps = {
   onMore: () => void;
   showLiked: boolean;
   disabled?: boolean;
-  disableNext?: boolean;
+  showNext?: boolean;
 };
 
 export function ActionPill({
@@ -21,8 +21,12 @@ export function ActionPill({
   onMore,
   showLiked,
   disabled = false,
-  disableNext = false,
+  showNext = true,
 }: ActionPillProps) {
+  const likeStrength = Math.max(0, Math.min(5, likes));
+  const likeMix = likeStrength <= 0 ? 0 : 50 + likeStrength * 10; // 1..5 -> 60..100
+  const likeColor = likeStrength > 0 ? `color-mix(in srgb, var(--kept) ${likeMix}%, var(--ink))` : undefined;
+
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 flex justify-center px-5 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
       <div className="glass flex h-14 items-center gap-1 rounded-full px-3 text-[color:var(--muted)]">
@@ -31,13 +35,14 @@ export function ActionPill({
           className={`relative grid h-11 w-11 place-items-center transition-colors ${
             likes > 0 ? "text-[color:var(--kept)]" : "hover:text-[color:var(--ink)]"
           }`}
+          style={likeColor ? { color: likeColor } : undefined}
           disabled={disabled}
           type="button"
           onClick={onLike}
         >
           <HeartMark className="h-6 w-6 transition-all duration-500" filled={likes > 0} />
           {likes > 1 ? (
-            <span className="absolute right-1 top-1 text-[0.62rem] tracking-[0.06em] text-[color:var(--kept)]">
+            <span className="absolute right-1 top-1 text-[0.62rem] tracking-[0.06em]">
               {likes}
             </span>
           ) : null}
@@ -52,7 +57,7 @@ export function ActionPill({
         <button
           aria-label="dislike poem"
           className={`relative grid h-11 w-11 place-items-center transition-colors ${
-            dislikes > 0 ? "text-[color:var(--muted)]" : "hover:text-[color:var(--ink)]"
+            dislikes > 0 ? "text-[color:var(--dislike)]" : "hover:text-[color:var(--ink)]"
           }`}
           disabled={disabled}
           type="button"
@@ -63,15 +68,17 @@ export function ActionPill({
             <span className="absolute right-1 top-1 text-[0.62rem] tracking-[0.06em]">{dislikes}</span>
           ) : null}
         </button>
-        <button
-          aria-label="show another poem"
-          className="grid h-11 w-11 place-items-center transition-colors hover:text-[color:var(--ink)]"
-          disabled={disabled || disableNext}
-          type="button"
-          onClick={onNext}
-        >
-          <CircleMark className="h-6 w-6" />
-        </button>
+        {showNext ? (
+          <button
+            aria-label="show another poem"
+            className="grid h-11 w-11 place-items-center transition-colors hover:text-[color:var(--ink)]"
+            disabled={disabled}
+            type="button"
+            onClick={onNext}
+          >
+            <CircleMark className="h-6 w-6" />
+          </button>
+        ) : null}
         <button
           aria-label="more"
           className="grid h-11 w-11 place-items-center transition-colors hover:text-[color:var(--ink)]"

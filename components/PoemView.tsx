@@ -52,6 +52,9 @@ export function PoemView({
           </h1>
           <p className="mt-2 text-[0.72rem] uppercase tracking-[0.16em] text-[color:var(--muted)]">
             by <span className="font-display italic normal-case tracking-[0.04em]">{poem.author}</span>
+            {poem.publishedYear ? (
+              <span className="normal-case tracking-[0.08em] text-[color:var(--muted)]"> · {poem.publishedYear}</span>
+            ) : null}
           </p>
         </div>
         <div className="shrink-0 pt-1 text-right">

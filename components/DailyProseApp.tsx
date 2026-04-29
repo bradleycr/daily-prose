@@ -293,7 +293,7 @@ export function DailyProseApp() {
 
       <ActionPill
         disabled={busy}
-        disableNext={archiveView}
+        showNext={!archiveView}
         likes={likes}
         dislikes={dislikes}
         showLiked={showLiked}

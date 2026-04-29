@@ -9,6 +9,7 @@
   --glass-border: rgba(255, 255, 255, 0.85);
   --glass-shadow: 0 10px 28px rgba(31, 27, 22, 0.16);
   --kept: #9b2226;
+  --dislike: #c23d72;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -21,6 +22,7 @@
     --glass-border: rgba(255, 255, 255, 0.16);
     --glass-shadow: 0 10px 28px rgba(0, 0, 0, 0.58);
     --kept: #e0a4a4;
+    --dislike: #f2a2c3;
   }
 }
 
