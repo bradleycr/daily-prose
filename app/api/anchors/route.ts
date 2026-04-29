@@ -36,10 +36,10 @@ export async function POST(req: Request) {
   const current = await readAnchorsFromGist(gistId);
   const next = upsert(current, body.anchor);
 
-  const ok = await writeAnchorsToGist({ gistId, token, anchors: next });
-  if (!ok) return NextResponse.json({ error: "anchors_gist_write_failed" }, { status: 502 });
+  const written = await writeAnchorsToGist({ gistId, token, anchors: next });
+  if (!written.ok) return NextResponse.json({ error: "anchors_gist_write_failed" }, { status: 502 });
 
-  return NextResponse.json({ anchors: next });
+  return NextResponse.json({ anchors: written.anchors ?? next });
 }
 
 export async function PUT(req: Request) {
@@ -55,18 +55,21 @@ export async function DELETE(req: Request) {
   const current = await readAnchorsFromGist(gistId);
   const next = current.filter((a) => a.id !== body.id);
 
-  const ok = await writeAnchorsToGist({ gistId, token, anchors: next });
-  if (!ok) return NextResponse.json({ error: "anchors_gist_write_failed" }, { status: 502 });
+  const written = await writeAnchorsToGist({ gistId, token, anchors: next });
+  if (!written.ok) return NextResponse.json({ error: "anchors_gist_write_failed" }, { status: 502 });
 
-  return NextResponse.json({ anchors: next });
+  return NextResponse.json({ anchors: written.anchors ?? next });
 }
 
 async function readAnchorsFromGist(gistId: string) {
   try {
-    const response = await fetch(`https://api.github.com/gists/${encodeURIComponent(gistId)}`, {
-      cache: "no-store",
-      headers: { Accept: "application/vnd.github+json" },
-    });
+    const response = await fetch(
+      `https://api.github.com/gists/${encodeURIComponent(gistId)}?t=${encodeURIComponent(String(Date.now()))}`,
+      {
+        cache: "no-store",
+        headers: { Accept: "application/vnd.github+json" },
+      },
+    );
     if (!response.ok) return [];
     const data = (await response.json()) as {
       files?: Record<string, { content?: string | null }>;
@@ -99,9 +102,19 @@ async function writeAnchorsToGist(input: { gistId: string; token: string; anchor
         },
       }),
     });
-    return response.ok;
+    if (!response.ok) return { ok: false as const };
+
+    const data = (await response.json()) as {
+      files?: Record<string, { content?: string | null }>;
+    };
+
+    const raw = data.files?.[FILE_NAME]?.content ?? JSON.stringify(input.anchors, null, 2);
+    const parsed = z.array(AnchorSchema).safeParse(JSON.parse(raw));
+    if (!parsed.success) return { ok: true as const, anchors: input.anchors };
+
+    return { ok: true as const, anchors: parsed.data };
   } catch {
-    return false;
+    return { ok: false as const };
   }
 }
 
