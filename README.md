@@ -21,7 +21,7 @@ GitHub Pages is not used because the poets.org pipe needs a server-side route. A
 If you want the app to choose from a small candidate pool using a taste-model agent, set:
 
 - `HUGGINGFACE_API_KEY` (required)
-- `HUGGINGFACE_MODEL` (optional; defaults are in `app/api/curate/route.ts`)
+- `HUGGINGFACE_MODEL` (optional; defaults are in `app/api/curate/route.ts`, tuned for small/free-tier-friendly models)
 
 See `.env.example`. Keys are server-only and never exposed to the client.
 

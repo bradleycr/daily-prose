@@ -40,19 +40,22 @@ export async function POST(req: Request) {
   }
 
   const body = BodySchema.parse(await req.json());
-  const model = process.env.HUGGINGFACE_MODEL ?? "meta-llama/Llama-3.1-8B-Instruct";
+  const preferred = process.env.HUGGINGFACE_MODEL?.trim();
+  const models = preferred
+    ? [preferred]
+    : [
+        // Small, commonly-available instruct models tend to be the most reliable on low/credit-limited tiers.
+        "microsoft/Phi-3-mini-4k-instruct",
+        "Qwen/Qwen2.5-3B-Instruct",
+        "mistralai/Mistral-7B-Instruct-v0.2",
+      ];
 
   const prompt = buildPrompt(body);
 
-  const result = await hf.textGeneration({
-    model,
-    inputs: prompt,
-    parameters: {
-      max_new_tokens: 320,
-      temperature: 0.7,
-      return_full_text: false,
-    },
-  });
+  const result = await runTextGeneration(models, prompt);
+  if (!result) {
+    return NextResponse.json({ error: "curator_unavailable" }, { status: 503 });
+  }
 
   const raw = (result.generated_text ?? "").trim();
   const parsed = safeParseJson(raw);
@@ -65,6 +68,31 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json(output);
+}
+
+async function runTextGeneration(models: string[], prompt: string) {
+  let lastError: unknown = null;
+
+  for (const model of models) {
+    try {
+      return await hf.textGeneration({
+        model,
+        inputs: prompt,
+        parameters: {
+          max_new_tokens: 320,
+          temperature: 0.65,
+          return_full_text: false,
+        },
+      });
+    } catch (error) {
+      lastError = error;
+      continue;
+    }
+  }
+
+  // Preserve evidence for server logs without exposing internals to client.
+  console.error("HF curator failed for all models", { lastError });
+  return null;
 }
 
 function buildPrompt(input: z.infer<typeof BodySchema>): string {
