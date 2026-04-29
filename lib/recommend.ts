@@ -21,24 +21,14 @@ export async function pickPoem(
   options: PickOptions = {},
 ): Promise<PickResult> {
   const seen = new Set([...state.prefs.seenPoemKeys, ...(options.sessionSeen ?? [])]);
-  const source = options.forceSource ?? chooseSource(state);
 
-  if (source === "contemporary") {
-    // poets.org can occasionally fail or repeat; try twice before falling back.
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const contemporary = await pickContemporary(seen);
-      if (contemporary) return { poem: contemporary };
-    }
+  if (options.forceSource === "canon") {
+    return pickCanonCurated(state, seen);
   }
 
-  const allowOlderCanon = Math.random() < 0.02; // "once in a blue moon"
-  const candidates = await pickCanonCandidates(state, seen, { allowOlderCanon });
-  if (!candidates.length) return { poem: null };
-
-  const curated = await tryCuratePick(candidates, state);
-  if (curated) return curated;
-
-  return { poem: scoreCandidates(candidates, state)[0] ?? null };
+  // Default + `forceSource: "contemporary"`: one daily "salon" — LLM chooses among
+  // several poets.org options plus a couple of canon wildcards for contrast.
+  return pickDailySalon(state, seen, { leanCanon: chooseSource(state) === "canon" });
 }
 
 export function updatePreferenceForEntry(
@@ -126,40 +116,110 @@ function chooseSource(state: AppState): SourceKind {
   return Math.random() < pCanon ? "canon" : "contemporary";
 }
 
-async function pickContemporary(seen: Set<string>): Promise<DisplayPoem | null> {
+async function pickDailySalon(
+  state: AppState,
+  seen: Set<string>,
+  options: { leanCanon: boolean },
+): Promise<PickResult> {
+  const contemporary = await fetchContemporaryPool(seen, 6);
+  const wildCount = options.leanCanon ? 4 : 2;
+  const wildCanon = await pickCanonCandidates(state, seen, {
+    allowOlderCanon: false,
+    maxPoems: wildCount,
+    authorSampleCap: options.leanCanon ? 16 : 12,
+  });
+
+  const merged = uniquePoemsByKey([...contemporary, ...wildCanon]);
+  if (merged.length < 2) {
+    const poem = merged[0] ?? (await pickContemporarySingle(seen));
+    return poem ? { poem } : { poem: null };
+  }
+
+  const curated = await tryCuratePick(merged, state);
+  if (curated) return curated;
+
+  const preferContemporary = merged.filter((p) => p.source === "contemporary");
+  const pool = preferContemporary.length ? preferContemporary : merged;
+  return { poem: scoreCandidates(pool, state)[0] ?? null };
+}
+
+async function pickCanonCurated(state: AppState, seen: Set<string>): Promise<PickResult> {
+  const allowOlderCanon = Math.random() < 0.02; // "once in a blue moon"
+  const candidates = await pickCanonCandidates(state, seen, { allowOlderCanon });
+  if (!candidates.length) return { poem: null };
+
+  const curated = await tryCuratePick(candidates, state);
+  if (curated) return curated;
+
+  return { poem: scoreCandidates(candidates, state)[0] ?? null };
+}
+
+function uniquePoemsByKey(poems: DisplayPoem[]): DisplayPoem[] {
+  const out: DisplayPoem[] = [];
+  const keys = new Set<string>();
+  for (const poem of poems) {
+    if (keys.has(poem.key)) continue;
+    keys.add(poem.key);
+    out.push(poem);
+  }
+  return out;
+}
+
+async function fetchContemporaryPool(seen: Set<string>, target: number): Promise<DisplayPoem[]> {
+  try {
+    const response = await fetch(`/api/contemporary?pool=1&n=${target}`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return [];
+
+    const data = (await response.json()) as { poems?: ContemporaryPoem[]; poem?: ContemporaryPoem | null };
+    const raw = Array.isArray(data.poems) ? data.poems : data.poem ? [data.poem] : [];
+
+    const out: DisplayPoem[] = [];
+    for (const poem of raw) {
+      const display = contemporaryToDisplay(poem, seen);
+      if (display) out.push(display);
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/** Legacy single-poem fetch (fallback when the pool endpoint is empty). */
+async function pickContemporarySingle(seen: Set<string>): Promise<DisplayPoem | null> {
   try {
     const response = await fetch("/api/contemporary", { headers: { Accept: "application/json" } });
     if (!response.ok) return null;
 
     const data = (await response.json()) as { poem: ContemporaryPoem | null };
     if (!data.poem) return null;
-
-    const poem = data.poem;
-    const key = poemKey("contemporary", poem.author, poem.title);
-    if (seen.has(key)) return null;
-
-    const publishedYear = yearFromCopyright(poem.copyright);
-    // If we can infer a year from copyright, enforce the recency window strictly.
-    // If we can't infer a year, we still allow the poem (poets.org is overwhelmingly contemporary),
-    // but we avoid obviously old republications when the copyright line includes a year.
-    if (typeof publishedYear === "number" && publishedYear < minRecentPoetsOrgYear()) {
-      return null;
-    }
-
-    return {
-      key,
-      title: poem.title,
-      author: poem.author,
-      source: "contemporary",
-      publishedYear,
-      htmlBody: poem.htmlBody,
-      poemUrl: poem.poemUrl,
-      authorUrl: poem.authorUrl,
-      copyright: poem.copyright,
-    };
+    return contemporaryToDisplay(data.poem, seen);
   } catch {
     return null;
   }
+}
+
+function contemporaryToDisplay(poem: ContemporaryPoem, seen: Set<string>): DisplayPoem | null {
+  const key = poemKey("contemporary", poem.author, poem.title);
+  if (seen.has(key)) return null;
+
+  const publishedYear = yearFromCopyright(poem.copyright);
+  if (typeof publishedYear === "number" && publishedYear < minRecentPoetsOrgYear()) {
+    return null;
+  }
+
+  return {
+    key,
+    title: poem.title,
+    author: poem.author,
+    source: "contemporary",
+    publishedYear,
+    htmlBody: poem.htmlBody,
+    poemUrl: poem.poemUrl,
+    authorUrl: poem.authorUrl,
+    copyright: poem.copyright,
+  };
 }
 
 function yearFromCopyright(copyright: string | undefined): number | undefined {
@@ -178,8 +238,11 @@ function authorCenturyStart(author: string): number {
 async function pickCanonCandidates(
   state: AppState,
   seen: Set<string>,
-  options: { allowOlderCanon: boolean },
+  options: { allowOlderCanon: boolean; maxPoems?: number; authorSampleCap?: number },
 ): Promise<DisplayPoem[]> {
+  const maxPoems = options.maxPoems ?? 26;
+  const authorSampleCap = options.authorSampleCap ?? 22;
+
   const authors = await getCanonAuthors();
   const modernOnly = options.allowOlderCanon
     ? authors
@@ -189,12 +252,16 @@ async function pickCanonCandidates(
         return authorCenturyStart(author) >= 1800;
       });
 
-  const sampledAuthors = sampleAuthors(modernOnly.length ? modernOnly : authors, state, 22);
+  const sampledAuthors = sampleAuthors(
+    modernOnly.length ? modernOnly : authors,
+    state,
+    Math.min(authorSampleCap, (modernOnly.length ? modernOnly : authors).length),
+  );
   const candidates: DisplayPoem[] = [];
 
   // Fetch several authors in parallel, stop as soon as we have enough options.
   await mapLimit(sampledAuthors, 5, async (author) => {
-    if (candidates.length >= 26) return;
+    if (candidates.length >= maxPoems) return;
 
     const poems = await getPoemsByAuthor(author);
     if (!poems.length) return;
@@ -220,7 +287,7 @@ async function pickCanonCandidates(
         authorUrl: wikipediaLinkFor(poem.author),
       });
 
-      if (candidates.length >= 26) return;
+      if (candidates.length >= maxPoems) return;
     }
   });
 
@@ -232,8 +299,8 @@ async function tryCuratePick(
   state: AppState,
 ): Promise<PickResult | null> {
   try {
-    // Only curate when we have a real pool to choose from.
-    if (candidates.length < 4) return null;
+    // `/api/curate` accepts two or more candidates; smaller pools still deserve a curator pass.
+    if (candidates.length < 2) return null;
 
     const history = state.ledger.slice(0, 120).map((entry) => ({
       id: entry.key,
@@ -254,7 +321,7 @@ async function tryCuratePick(
     };
 
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 1400);
+    const timeout = window.setTimeout(() => controller.abort(), 12_000);
 
     const response = await fetch("/api/curate", {
       method: "POST",

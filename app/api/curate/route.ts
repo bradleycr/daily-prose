@@ -40,6 +40,7 @@ const OutputSchema = z.object({
 });
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   if (!process.env.HUGGINGFACE_API_KEY) {
@@ -194,6 +195,10 @@ function buildPrompt(input: z.infer<typeof BodySchema>): string {
   lines.push(
     "You are a highly perceptive literary curator and taste model.",
     "You do NOT write poetry. You SELECT one poem that best fits the user today.",
+    "",
+    "CONTEXT:",
+    "- Candidates may mix contemporary web poems (often from Poem-a-Day / poets.org) with a few short canon excerpts.",
+    "- Treat this like a daily editorial choice: one poem the reader should actually sit with today.",
     "",
     "CRITICAL RULES:",
     "- Select exactly ONE candidate.",
