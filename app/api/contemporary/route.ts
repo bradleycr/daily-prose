@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { contemporaryPoolKey } from "@/lib/contemporaryPoolKeys";
+import { fetchPoesisRandomPoem } from "@/lib/poesis";
 import { fetchTodaysContemporary } from "@/lib/poetsorg";
 import { fetchDiscoveredPoetsOrgPoem } from "@/lib/poetsorgDiscover";
 import type { ContemporaryPoem } from "@/lib/types";
@@ -45,6 +46,10 @@ async function buildContemporaryPool(target: number): Promise<ContemporaryPoem[]
   };
 
   push(await fetchTodaysContemporary());
+
+  // Add a CC-licensed wildcard (Poesis) for variety.
+  // This also keeps the LLM's daily pool non-degenerate when poets.org discovery is unavailable.
+  push(await fetchPoesisRandomPoem({ language: "en" }));
 
   let attempts = 0;
   while (poems.length < target && attempts < 10) {

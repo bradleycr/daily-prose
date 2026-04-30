@@ -18,7 +18,7 @@ export type ContemporaryPoem = {
   poemUrl: string;
   authorUrl: string;
   copyright: string;
-  source: "poets.org";
+  source: "poets.org" | "poesis";
 };
 
 export type DisplayPoem = {

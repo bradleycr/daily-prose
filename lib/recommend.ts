@@ -201,7 +201,8 @@ async function pickContemporarySingle(seen: Set<string>): Promise<DisplayPoem | 
 }
 
 function contemporaryToDisplay(poem: ContemporaryPoem, seen: Set<string>): DisplayPoem | null {
-  const key = poemKey("contemporary", poem.author, poem.title);
+  // Keys must be stable and globally unique across contemporary providers.
+  const key = poem.source === "poesis" ? `contemporary::poesis::${poem.author}::${poem.title}` : poemKey("contemporary", poem.author, poem.title);
   if (seen.has(key)) return null;
 
   const publishedYear = yearFromCopyright(poem.copyright);
