@@ -35,8 +35,11 @@ export async function fetchPoesisRandomPoem(options?: { language?: "en" | "fr" |
     const lines = Array.isArray(data.lines) ? data.lines : [];
     if (!title || !author || lines.length < 2) return null;
 
+    // Poesis is CC-licensed but spans many eras. We only use it as a contemporary feed
+    // when it provides a dated signal inside our rolling recency window.
     const publishedYear = earliestYearInText(data.published ?? "");
-    if (typeof publishedYear === "number" && publishedYear < minRecentPoetsOrgYear()) return null;
+    if (typeof publishedYear !== "number") return null;
+    if (publishedYear < minRecentPoetsOrgYear()) return null;
 
     const authorSlug = (data.author?.slug ?? "").trim();
     const poemSlug = (data.slug ?? "").trim();
