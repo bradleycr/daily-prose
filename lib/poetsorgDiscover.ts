@@ -10,9 +10,15 @@ export async function fetchDiscoveredPoetsOrgPoem(seenKeys: Set<string>): Promis
   // We only ingest full text from poets.org (safe + consistent parsing).
   // Discovery is optional; without Google CSE env vars this will return null.
   const queries = [
-    "site:poets.org/poem/ \"Poem\"",
-    "site:poets.org/poem/ \"poem\"",
-    "site:poets.org/poem/ \"excerpt\"",
+    // Prefer Poem-a-Day credit lines (almost always contemporary + dated).
+    'site:poets.org/poem/ "Originally published in Poem-a-Day"',
+    'site:poets.org/poem/ "Published in Poem-a-Day"',
+    // Year-bearing copyright lines are a strong filter for our recency window.
+    'site:poets.org/poem/ "Copyright" "20"',
+    // Fallbacks: still poets.org poems, but less tightly targeted.
+    'site:poets.org/poem/ "Poem-a-Day"',
+    'site:poets.org/poem/ "poem"',
+    'site:poets.org/poem/ "excerpt"',
   ];
 
   for (const q of shuffle(queries)) {
